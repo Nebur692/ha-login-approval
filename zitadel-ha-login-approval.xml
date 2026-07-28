@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>zitadel-ha-login-approval</Name>
-  <Repository>zitadel-ha-login-approval:latest</Repository>
+  <Repository>ghcr.io/nebur692/zitadel-ha-login-approval:latest</Repository>
   <Registry/>
   <Network>bridge</Network>
   <MyIP/>
@@ -10,10 +10,6 @@
   <Support>https://github.com/Nebur692/zitadel-ha-login-approval/issues</Support>
   <Project>https://github.com/Nebur692/zitadel-ha-login-approval</Project>
   <Overview>Puente entre ZITADEL y Home Assistant: cuando alguien inicia sesión en cualquier servicio conectado a ZITADEL (Zabbix, WordPress, etc.), este servicio manda una notificación con botones Aprobar/Rechazar a los dispositivos de Home Assistant asignados a esa cuenta, y el login solo se completa si se pulsa Aprobar.&#13;
-&#13;
-IMPORTANTE: esta imagen todavía NO está publicada en ningún registro (ghcr.io, Docker Hub...). Antes de poder arrancar este contenedor con esta plantilla, hay que construir la imagen localmente en este mismo NAS, desde la carpeta del proyecto:&#13;
-  docker build -t zitadel-ha-login-approval:latest /ruta/al/proyecto&#13;
-Solo entonces "Repository" (zitadel-ha-login-approval:latest) encontrará la imagen ya construida en el propio Docker local, sin necesidad de descargarla de ningún sitio.&#13;
 &#13;
 Requiere: 1) un Target de Actions V2 ya creado en ZITADEL (tipo REST Webhook, payload JSON, interruptOnError=true) apuntando a http://IP-DE-ESTE-CONTENEDOR:8000/webhook/create-session, con una Execution sobre el método /zitadel.session.v2.SessionService/CreateSession — la clave de firma que ZITADEL devuelve al crear ese Target es el valor de ZITADEL_TARGET_SIGNING_KEY de abajo. 2) un usuario máquina en ZITADEL con permisos de gestión (rol IAM_OWNER) para leer/escribir metadatos de usuario y listar usuarios — sus credenciales van en ZITADEL_CLIENT_ID/ZITADEL_CLIENT_SECRET.&#13;
 &#13;

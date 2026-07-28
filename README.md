@@ -66,29 +66,31 @@ installed on at least one device. Environment variables:
 | `METADATA_KEY` | Don't touch unless you know why — the ZITADEL user metadata key the device list is stored under. |
 
 A ready-to-use Unraid Community Applications template is included:
-[`zitadel-ha-login-approval.xml`](zitadel-ha-login-approval.xml). Since the image isn't published
-to any registry, build it locally first: `docker build -t zitadel-ha-login-approval:latest .`
+[`zitadel-ha-login-approval.xml`](zitadel-ha-login-approval.xml), pointing at the published image
+`ghcr.io/nebur692/zitadel-ha-login-approval:latest`.
 
 #### Plain Docker / Docker Compose (no Unraid required)
 
-The image isn't published to any registry yet, so build it from source instead of pulling it:
+The image is published on GHCR — no need to build it yourself:
 
 ```bash
-git clone https://github.com/Nebur692/zitadel-ha-login-approval.git
-cd zitadel-ha-login-approval
+docker pull ghcr.io/nebur692/zitadel-ha-login-approval:latest
 ```
 
-Edit the environment values in [`docker-compose.yml`](docker-compose.yml) (already included in the
-repo) to match your own ZITADEL/Home Assistant setup, then:
+Or with Compose: grab just the [`docker-compose.yml`](docker-compose.yml) file from this repo
+(no need to clone the whole thing), edit the environment values to match your own ZITADEL/Home
+Assistant setup, then:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 This exposes the service on port `8000` of the host running it — that's the IP/port you'll use both
 for the Target's endpoint in ZITADEL (`http://<host-ip>:8000/webhook/create-session`) and for the
-admin panel (`http://<host-ip>:8000/admin`). Rebuild and restart with
-`docker compose up -d --build` again after pulling any future update.
+admin panel (`http://<host-ip>:8000/admin`). Update in the future with
+`docker compose pull && docker compose up -d`.
+
+Available tags: `latest` (tracks the latest release), `1.0.0` (this exact version, pinned).
 
 ### ⚙️ Setting up the ZITADEL side, step by step
 
@@ -201,31 +203,32 @@ instalada en al menos un dispositivo. Variables de entorno:
 | `METADATA_KEY` | No tocar salvo que sepas por qué — la clave de metadato de usuario de ZITADEL donde se guarda la lista de dispositivos. |
 
 Incluye una plantilla lista para Community Applications de Unraid:
-[`zitadel-ha-login-approval.xml`](zitadel-ha-login-approval.xml). Como la imagen no está publicada
-en ningún registro, constrúyela primero en local: `docker build -t zitadel-ha-login-approval:latest .`
+[`zitadel-ha-login-approval.xml`](zitadel-ha-login-approval.xml), que apunta a la imagen ya
+publicada `ghcr.io/nebur692/zitadel-ha-login-approval:latest`.
 
 #### Docker normal / Docker Compose (sin necesidad de Unraid)
 
-La imagen todavía no está publicada en ningún registro, así que hay que construirla desde el código
-en vez de descargarla:
+La imagen está publicada en GHCR — no hace falta construirla tú mismo:
 
 ```bash
-git clone https://github.com/Nebur692/zitadel-ha-login-approval.git
-cd zitadel-ha-login-approval
+docker pull ghcr.io/nebur692/zitadel-ha-login-approval:latest
 ```
 
-Edita los valores de entorno en [`docker-compose.yml`](docker-compose.yml) (ya incluido en el repo)
-para que coincidan con tu propio Zitadel/Home Assistant, y luego:
+O con Compose: descarga solo el fichero [`docker-compose.yml`](docker-compose.yml) de este repo
+(no hace falta clonarlo entero), edita los valores de entorno para que coincidan con tu propio
+ZITADEL/Home Assistant, y luego:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 Esto expone el servicio en el puerto `8000` del host donde lo ejecutes — esa es la IP/puerto que
 usarás tanto para el punto de conexión del Target en Zitadel
 (`http://IP-del-host:8000/webhook/create-session`) como para el panel de administración
-(`http://IP-del-host:8000/admin`). Para actualizar en el futuro, vuelve a ejecutar
-`docker compose up -d --build` tras descargar los cambios nuevos.
+(`http://IP-del-host:8000/admin`). Para actualizar en el futuro:
+`docker compose pull && docker compose up -d`.
+
+Tags disponibles: `latest` (la última versión publicada), `1.0.0` (esta versión exacta, fijada).
 
 ### ⚙️ Configurar el lado de ZITADEL, paso a paso
 
