@@ -69,6 +69,27 @@ A ready-to-use Unraid Community Applications template is included:
 [`zitadel-ha-login-approval.xml`](zitadel-ha-login-approval.xml). Since the image isn't published
 to any registry, build it locally first: `docker build -t zitadel-ha-login-approval:latest .`
 
+#### Plain Docker / Docker Compose (no Unraid required)
+
+The image isn't published to any registry yet, so build it from source instead of pulling it:
+
+```bash
+git clone https://github.com/Nebur692/zitadel-ha-login-approval.git
+cd zitadel-ha-login-approval
+```
+
+Edit the environment values in [`docker-compose.yml`](docker-compose.yml) (already included in the
+repo) to match your own ZITADEL/Home Assistant setup, then:
+
+```bash
+docker compose up -d --build
+```
+
+This exposes the service on port `8000` of the host running it — that's the IP/port you'll use both
+for the Target's endpoint in ZITADEL (`http://<host-ip>:8000/webhook/create-session`) and for the
+admin panel (`http://<host-ip>:8000/admin`). Rebuild and restart with
+`docker compose up -d --build` again after pulling any future update.
+
 ### ⚙️ Setting up the ZITADEL side, step by step
 
 This is the fiddly part, and the Console UI presents several choices with no explanation — here's
@@ -182,6 +203,29 @@ instalada en al menos un dispositivo. Variables de entorno:
 Incluye una plantilla lista para Community Applications de Unraid:
 [`zitadel-ha-login-approval.xml`](zitadel-ha-login-approval.xml). Como la imagen no está publicada
 en ningún registro, constrúyela primero en local: `docker build -t zitadel-ha-login-approval:latest .`
+
+#### Docker normal / Docker Compose (sin necesidad de Unraid)
+
+La imagen todavía no está publicada en ningún registro, así que hay que construirla desde el código
+en vez de descargarla:
+
+```bash
+git clone https://github.com/Nebur692/zitadel-ha-login-approval.git
+cd zitadel-ha-login-approval
+```
+
+Edita los valores de entorno en [`docker-compose.yml`](docker-compose.yml) (ya incluido en el repo)
+para que coincidan con tu propio Zitadel/Home Assistant, y luego:
+
+```bash
+docker compose up -d --build
+```
+
+Esto expone el servicio en el puerto `8000` del host donde lo ejecutes — esa es la IP/puerto que
+usarás tanto para el punto de conexión del Target en Zitadel
+(`http://IP-del-host:8000/webhook/create-session`) como para el panel de administración
+(`http://IP-del-host:8000/admin`). Para actualizar en el futuro, vuelve a ejecutar
+`docker compose up -d --build` tras descargar los cambios nuevos.
 
 ### ⚙️ Configurar el lado de ZITADEL, paso a paso
 

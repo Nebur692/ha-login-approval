@@ -1,0 +1,16 @@
+services:
+  zitadel-ha-login-approval:
+    build: .
+    restart: unless-stopped
+    ports:
+      - 8000:8000
+    environment:
+      - HA_BASE_URL=http://homeassistant.local:8123
+      - HA_TOKEN=your_long_lived_ha_token_here
+      - ZITADEL_BASE_URL=https://sso.example.com
+      - ZITADEL_CLIENT_ID=your_zitadel_machine_client_id
+      - ZITADEL_CLIENT_SECRET=your_zitadel_machine_client_secret
+      - ZITADEL_TARGET_SIGNING_KEY=the_signing_key_zitadel_gave_you
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=changeme
+      - APPROVAL_TIMEOUT_SECONDS=120
