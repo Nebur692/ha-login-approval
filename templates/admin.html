@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>ZITADEL ↔ Home Assistant — Login Approval</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+    h1 { font-size: 1.3rem; }
+    .user-card { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+    .user-card h2 { font-size: 1rem; margin: 0 0 0.5rem; }
+    .username { color: #666; font-weight: normal; }
+    label.target { display: block; margin: 0.25rem 0; font-family: monospace; font-size: 0.9rem; }
+    button { margin-top: 0.75rem; padding: 0.4rem 1rem; cursor: pointer; }
+    .empty { color: #999; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>Dispositivos de aprobación por cuenta / Approval devices per account</h1>
+  <p>Selecciona a qué dispositivos con la app de Home Assistant se manda la notificación de
+     aprobar/rechazar cuando esa cuenta inicia sesión. Una cuenta sin ningún dispositivo marcado
+     no pide aprobación (queda solo con su contraseña).</p>
+
+  {% if not mobile_targets %}
+    <p class="empty">No se ha encontrado ningún dispositivo (notify.mobile_app_*) en Home Assistant.</p>
+  {% endif %}
+
+  {% for row in rows %}
+  <div class="user-card">
+    <h2>{{ row.display_name }} <span class="username">({{ row.username }})</span></h2>
+    <form method="post" action="/admin/save">
+      <input type="hidden" name="user_id" value="{{ row.id }}">
+      {% for target in mobile_targets %}
+      <label class="target">
+        <input type="checkbox" name="targets" value="{{ target }}" {% if target in row.current_targets %}checked{% endif %}>
+        {{ target }}
+      </label>
+      {% endfor %}
+      <button type="submit">Guardar / Save</button>
+    </form>
+  </div>
+  {% endfor %}
+</body>
+</html>
