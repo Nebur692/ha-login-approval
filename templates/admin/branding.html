@@ -1,0 +1,20 @@
+{% extends "admin/base.html" %}
+{% block title %}Branding{% endblock %}
+{% block content %}
+<h1>Bridge page branding</h1>
+<p class="muted">Not shown on the bridge page yet — saved here for when that wiring lands.</p>
+
+<form method="post" action="/admin/branding/save" enctype="multipart/form-data">
+  <label>Title<br><input type="text" name="title" value="{{ branding.title or '' }}"></label><br><br>
+  <label>Logo<br><input type="file" name="logo" accept="image/*"></label>
+  {% if branding.logo_path %}<p class="muted">Current: {{ branding.logo_path }}</p>{% endif %}
+  <br>
+  <label>Background<br><input type="file" name="background" accept="image/*"></label>
+  {% if branding.background_path %}<p class="muted">Current: {{ branding.background_path }}</p>{% endif %}
+  <br>
+  <label>Favicon<br><input type="file" name="favicon" accept="image/*"></label>
+  {% if branding.favicon_path %}<p class="muted">Current: {{ branding.favicon_path }}</p>{% endif %}
+  <br><br>
+  <button type="submit">Save</button>
+</form>
+{% endblock %}

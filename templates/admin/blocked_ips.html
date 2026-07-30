@@ -1,0 +1,29 @@
+{% extends "admin/base.html" %}
+{% block title %}Blocked IPs{% endblock %}
+{% block content %}
+<h1>Blocked IPs</h1>
+<p class="muted">3 consecutive failures (explicit rejects + wrong recovery codes) on the same
+   account + IP block that pair — never a global IP block.</p>
+
+{% if not blocked %}
+  <p class="empty">No IP is currently blocked.</p>
+{% else %}
+<table>
+  <tr><th>Account</th><th>IP</th><th>Blocked at</th><th></th></tr>
+  {% for b in blocked %}
+  <tr>
+    <td>{{ b.zitadel_user_id }}</td>
+    <td>{{ b.ip }}</td>
+    <td>{{ b.blocked_at }}</td>
+    <td>
+      <form method="post" action="/admin/blocked-ips/unblock" style="margin:0;">
+        <input type="hidden" name="zitadel_user_id" value="{{ b.zitadel_user_id }}">
+        <input type="hidden" name="ip" value="{{ b.ip }}">
+        <button type="submit">Unblock</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

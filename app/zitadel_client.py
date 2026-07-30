@@ -97,6 +97,22 @@ async def list_users() -> list[dict]:
     return users
 
 
+async def get_user_linked_idp_ids(user_id: str) -> list[str]:
+    """Returns the ZITADEL-assigned IDs of every external IDP this user has
+    linked their account to (empty if none). Verified live against a real
+    instance: `result` is entirely absent from the response when empty,
+    not an empty list — same shape as list_users()'s `_search`, and same
+    eventual-consistency caveat (a link created moments ago may not show up
+    immediately in this projection)."""
+    resp = await _require_client().post(
+        f"/management/v1/users/{user_id}/idps/_search",
+        headers=await _auth_headers(),
+        json={},
+    )
+    resp.raise_for_status()
+    return [link["idpId"] for link in resp.json().get("result", [])]
+
+
 async def find_user_by_login(login: str) -> dict | None:
     """Resolves a human user by email or username (case-insensitive) — used
     by the passwordless IDP flow to identify the account from the email the

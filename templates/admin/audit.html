@@ -1,0 +1,30 @@
+{% extends "admin/base.html" %}
+{% block title %}Audit{% endblock %}
+{% block content %}
+<h1>Login attempt history</h1>
+
+<form method="get" action="/admin/audit">
+  <select name="user_id" onchange="this.form.submit()">
+    {% for u in users %}
+    <option value="{{ u.id }}" {% if u.id == selected_id %}selected{% endif %}>{{ u.display_name }}</option>
+    {% endfor %}
+  </select>
+</form>
+
+{% if not events %}
+  <p class="empty">No login attempts recorded for this account yet.</p>
+{% else %}
+<table>
+  <tr><th>When</th><th>Result</th><th>IP</th><th>Browser</th><th>Location</th></tr>
+  {% for e in events %}
+  <tr>
+    <td>{{ e.occurred_at }}</td>
+    <td>{{ e.event_type }}</td>
+    <td>{{ e.ip or "" }}</td>
+    <td>{{ e.user_agent or "" }}</td>
+    <td>{{ [e.geo_city, e.geo_country, e.geo_asn_org] | select | join(", ") }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

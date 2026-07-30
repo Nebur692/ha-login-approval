@@ -1,0 +1,27 @@
+{% extends "admin/base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<h1>At a glance</h1>
+
+<div class="card">
+  <p>{{ total_accounts }} account(s), {{ accounts_with_devices }} with at least one device assigned.</p>
+  <p>{{ blocked_count }} IP(s) currently blocked{% if blocked_count %} — <a href="/admin/blocked-ips">review</a>{% endif %}.</p>
+</div>
+
+<div class="card">
+  <h2>Recovery codes remaining</h2>
+  {% if not recovery_summary %}
+    <p class="empty">No account has any recovery codes generated yet.</p>
+  {% else %}
+  <table>
+    <tr><th>Account</th><th>Remaining</th></tr>
+    {% for row in recovery_summary %}
+    <tr>
+      <td>{{ row.display_name }}</td>
+      <td class="{% if row.remaining <= 3 %}warn{% endif %}">{{ row.remaining }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

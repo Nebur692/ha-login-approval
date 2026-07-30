@@ -69,5 +69,15 @@ class Settings(BaseSettings):
     the audit log), it's not required for the login flow to work."""
     geoip_db_dir: str = "/data/geoip"
 
+    # v2.0.0 admin panel additions
+    zitadel_idp_resource_id: str = ""
+    """The ID ZITADEL assigned to this service's External IDP registration
+    (Console -> Identity Providers) — lets the admin panel show "Linked to
+    HA: yes/no" per account. Left empty, that column just always shows no."""
+    branding_asset_dir: str = "/data/branding"
+    """Where uploaded logo/background/favicon files are stored — only
+    their path lives in the bridge_branding table, keeping the SQLite file
+    itself small and a simple single-file backup."""
+
 
 settings = Settings()

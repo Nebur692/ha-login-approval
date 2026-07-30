@@ -1,0 +1,30 @@
+{% extends "admin/base.html" %}
+{% block title %}Recovery codes{% endblock %}
+{% block content %}
+<h1>Recovery codes</h1>
+
+{% if new_codes %}
+<div class="card">
+  <h2>New codes for {{ new_codes_for }}</h2>
+  <p class="warn">Shown once — copy or save these now, they can't be retrieved again. Generating a
+     new batch invalidates every code below immediately.</p>
+  <code class="codes-block">{{ new_codes | join("\n") }}</code>
+</div>
+{% endif %}
+
+<table>
+  <tr><th>Account</th><th>Remaining</th><th></th></tr>
+  {% for row in rows %}
+  <tr>
+    <td>{{ row.display_name }}</td>
+    <td class="{% if row.remaining <= 3 %}warn{% endif %}">{{ row.remaining }}</td>
+    <td>
+      <form method="post" action="/admin/recovery/generate" style="margin:0;">
+        <input type="hidden" name="user_id" value="{{ row.id }}">
+        <button type="submit">{% if row.remaining %}Regenerate{% else %}Generate{% endif %}</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
