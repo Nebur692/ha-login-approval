@@ -1,10 +1,10 @@
 <div align="center">
 
-# zitadel-ha-login-approval
+# ha-login-approval
 
 *Approve or reject ZITADEL logins from a Home Assistant push notification — per account*
 
-![Release](https://img.shields.io/github/v/release/Nebur692/zitadel-ha-login-approval?label=release&color=blue)
+![Release](https://img.shields.io/github/v/release/Nebur692/ha-login-approval?label=release&color=blue)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-30363D?logo=githubsponsors&logoColor=EA4AAA)](https://github.com/sponsors/Nebur692)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/nebur69265723)
@@ -66,15 +66,15 @@ installed on at least one device. Environment variables:
 | `METADATA_KEY` | Don't touch unless you know why — the ZITADEL user metadata key the device list is stored under. |
 
 A ready-to-use Unraid Community Applications template is included:
-[`zitadel-ha-login-approval.xml`](zitadel-ha-login-approval.xml), pointing at the published image
-`ghcr.io/nebur692/zitadel-ha-login-approval:latest`.
+[`ha-login-approval.xml`](ha-login-approval.xml), pointing at the published image
+`ghcr.io/nebur692/ha-login-approval:latest`.
 
 #### Plain Docker / Docker Compose (no Unraid required)
 
 The image is published on GHCR — no need to build it yourself:
 
 ```bash
-docker pull ghcr.io/nebur692/zitadel-ha-login-approval:latest
+docker pull ghcr.io/nebur692/ha-login-approval:latest
 ```
 
 Or with Compose: grab just the [`docker-compose.yml`](docker-compose.yml) file from this repo
@@ -203,15 +203,15 @@ instalada en al menos un dispositivo. Variables de entorno:
 | `METADATA_KEY` | No tocar salvo que sepas por qué — la clave de metadato de usuario de ZITADEL donde se guarda la lista de dispositivos. |
 
 Incluye una plantilla lista para Community Applications de Unraid:
-[`zitadel-ha-login-approval.xml`](zitadel-ha-login-approval.xml), que apunta a la imagen ya
-publicada `ghcr.io/nebur692/zitadel-ha-login-approval:latest`.
+[`ha-login-approval.xml`](ha-login-approval.xml), que apunta a la imagen ya
+publicada `ghcr.io/nebur692/ha-login-approval:latest`.
 
 #### Docker normal / Docker Compose (sin necesidad de Unraid)
 
 La imagen está publicada en GHCR — no hace falta construirla tú mismo:
 
 ```bash
-docker pull ghcr.io/nebur692/zitadel-ha-login-approval:latest
+docker pull ghcr.io/nebur692/ha-login-approval:latest
 ```
 
 O con Compose: descarga solo el fichero [`docker-compose.yml`](docker-compose.yml) de este repo

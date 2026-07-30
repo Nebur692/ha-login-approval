@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     await zitadel_client.close_client()
 
 
-app = FastAPI(title="zitadel-ha-login-approval", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title="ha-login-approval", lifespan=lifespan, docs_url=None, redoc_url=None)
 app.include_router(admin.router)
 app.include_router(webhook.router)
 

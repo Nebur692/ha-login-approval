@@ -1,24 +1,24 @@
 <?xml version="1.0"?>
 <Container version="2">
-  <Name>zitadel-ha-login-approval</Name>
-  <Repository>ghcr.io/nebur692/zitadel-ha-login-approval:latest</Repository>
+  <Name>ha-login-approval</Name>
+  <Repository>ghcr.io/nebur692/ha-login-approval:latest</Repository>
   <Registry/>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/Nebur692/zitadel-ha-login-approval/issues</Support>
-  <Project>https://github.com/Nebur692/zitadel-ha-login-approval</Project>
+  <Support>https://github.com/Nebur692/ha-login-approval/issues</Support>
+  <Project>https://github.com/Nebur692/ha-login-approval</Project>
   <Overview>Puente entre ZITADEL y Home Assistant: cuando alguien inicia sesión en cualquier servicio conectado a ZITADEL (Zabbix, WordPress, etc.), este servicio manda una notificación con botones Aprobar/Rechazar a los dispositivos de Home Assistant asignados a esa cuenta, y el login solo se completa si se pulsa Aprobar.&#13;
 &#13;
 Requiere: 1) un Target de Actions V2 ya creado en ZITADEL (tipo REST Webhook, payload JSON, interruptOnError=true) apuntando a http://IP-DE-ESTE-CONTENEDOR:8000/webhook/create-session, con una Execution sobre el método /zitadel.session.v2.SessionService/CreateSession — la clave de firma que ZITADEL devuelve al crear ese Target es el valor de ZITADEL_TARGET_SIGNING_KEY de abajo. 2) un usuario máquina en ZITADEL con permisos de gestión (rol IAM_OWNER) para leer/escribir metadatos de usuario y listar usuarios — sus credenciales van en ZITADEL_CLIENT_ID/ZITADEL_CLIENT_SECRET.&#13;
 &#13;
-Guía completa paso a paso (incluida la parte lioso de la Consola de ZITADEL): https://github.com/Nebur692/zitadel-ha-login-approval&#13;
+Guía completa paso a paso (incluida la parte lioso de la Consola de ZITADEL): https://github.com/Nebur692/ha-login-approval&#13;
 &#13;
 Panel de administración (elegir qué dispositivos reciben la notificación por cada cuenta): http://IP:8000/admin</Overview>
   <Category>Security:</Category>
   <WebUI>http://[IP]:[PORT:8000]/admin</WebUI>
-  <TemplateURL>https://raw.githubusercontent.com/Nebur692/zitadel-ha-login-approval/main/zitadel-ha-login-approval.xml</TemplateURL>
+  <TemplateURL>https://raw.githubusercontent.com/Nebur692/ha-login-approval/main/ha-login-approval.xml</TemplateURL>
   <Icon/>
   <ExtraParams>--restart unless-stopped</ExtraParams>
   <PostArgs/>

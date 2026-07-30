@@ -1,6 +1,6 @@
 services:
-  zitadel-ha-login-approval:
-    image: ghcr.io/nebur692/zitadel-ha-login-approval:latest
+  ha-login-approval:
+    image: ghcr.io/nebur692/ha-login-approval:latest
     restart: unless-stopped
     ports:
       - 8000:8000
