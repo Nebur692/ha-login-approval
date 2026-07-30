@@ -54,6 +54,8 @@ Panel de administración: http://IP:8000/admin</Overview>
 
   <Config Name="ZITADEL Target Signing Key (webhook legado)" Target="ZITADEL_TARGET_SIGNING_KEY" Default="" Mode="" Description="OPCIONAL, solo junto con ZITADEL Base URL. La clave de firma que ZITADEL devuelve al crear el Target de Actions V2 — verifica que las llamadas al webhook vienen de verdad de tu ZITADEL." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
 
+  <Config Name="Metadata Key (webhook legado)" Target="METADATA_KEY" Default="ha_notify_targets" Mode="" Description="No tocar salvo que sepas por qué. Solo para el webhook legado: nombre de la clave de metadato de usuario en ZITADEL donde se guarda la lista de dispositivos asignados a cada cuenta." Type="Variable" Display="advanced" Required="false" Mask="false">ha_notify_targets</Config>
+
   <Config Name="Approval Timeout Seconds" Target="APPROVAL_TIMEOUT_SECONDS" Default="120" Mode="" Description="Cuántos segundos se espera la respuesta (aprobar/rechazar) antes de darla por fallida, en ambos flujos. Si usas el webhook legado, debe quedarse claramente por debajo del límite de 270s de ZITADEL para Targets de Actions V2." Type="Variable" Display="advanced" Required="false" Mask="false">120</Config>
 
   <Config Name="Retraso de reintento/recuperación (segundos)" Target="BRIDGE_RECOVERY_UNLOCK_DELAY_SECONDS" Default="60" Mode="" Description="Solo login sin contraseña. Segundos sin respuesta antes de que la página ofrezca reintentar o usar un código de recuperación — la aprobación original sigue esperando en paralelo." Type="Variable" Display="advanced" Required="false" Mask="false">60</Config>
