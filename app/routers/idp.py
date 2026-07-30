@@ -36,7 +36,7 @@ from fastapi import APIRouter, Form, Header, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import accounts, audit, geoip, ha_client, idp_jwt, ip_blocking, recovery_codes
+from app import accounts, audit, geoip, ha_client, idp_jwt, ip_blocking, messages, recovery_codes
 from app.approval_flow import ApprovalOutcome, LoginContext, run_approval
 from app.config import settings
 from app.db import get_db
@@ -116,7 +116,11 @@ async def authorize(
         # but if some RP ever does send it, skip the email step entirely.
         asyncio.create_task(_start_approval(request_id, login_hint))
 
-    return templates.TemplateResponse(request, "idp_bridge.html", {"request_id": request_id})
+    lang = messages.detect_browser_lang(request.headers.get("accept-language"))
+    strings = messages.bridge_page_strings(lang)
+    return templates.TemplateResponse(request, "idp_bridge.html", {
+        "request_id": request_id, "lang": lang, "strings": strings,
+    })
 
 
 _OUTCOME_TO_STATUS = {

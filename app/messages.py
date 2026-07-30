@@ -48,3 +48,52 @@ def build_notification(lang: str, user_agent: dict) -> dict:
         "approve": template["approve"],
         "reject": template["reject"],
     }
+
+
+_BRIDGE_PAGE_STRINGS = {
+    "es": {
+        "page_title": "Iniciar sesión",
+        "email_prompt": "Escribe tu email para continuar.",
+        "continue_button": "Continuar",
+        "waiting_message": "Comprueba tu móvil y aprueba la solicitud de inicio de sesión…",
+        "still_nothing": "¿Sigue sin llegar? Puedes:",
+        "resend_button": "Reenviar la notificación",
+        "recovery_button": "Usar un código de recuperación",
+        "recovery_prompt": "Escribe un código de recuperación de un solo uso para tu cuenta.",
+        "recovery_submit_button": "Iniciar sesión con código de recuperación",
+        "go_back_button": "← Volver al inicio de sesión",
+        "error_generic": "Algo ha ido mal. Inténtalo de nuevo.",
+        "error_recovery_invalid": "Ese código de recuperación no es válido.",
+        "error_not_approved": "El inicio de sesión no se ha aprobado.",
+    },
+    "en": {
+        "page_title": "Sign in",
+        "email_prompt": "Enter your email to continue.",
+        "continue_button": "Continue",
+        "waiting_message": "Check your phone and approve the sign-in request…",
+        "still_nothing": "Still nothing? You can:",
+        "resend_button": "Resend the notification",
+        "recovery_button": "Use a recovery code",
+        "recovery_prompt": "Enter a one-time recovery code for your account.",
+        "recovery_submit_button": "Sign in with recovery code",
+        "go_back_button": "← Back to login",
+        "error_generic": "Something went wrong. Please try again.",
+        "error_recovery_invalid": "That recovery code isn't valid.",
+        "error_not_approved": "Sign-in was not approved.",
+    },
+}
+_BRIDGE_DEFAULT_LANG = "en"
+
+
+def detect_browser_lang(accept_language_header: str | None) -> str:
+    """Picks 'es' or 'en' from the browser's own Accept-Language header —
+    this is what a real visitor's browser sends, independent of whatever
+    language Home Assistant happens to be configured in (that's a separate,
+    unrelated detection used only for the push notification text)."""
+    if accept_language_header and accept_language_header.strip().lower().startswith("es"):
+        return "es"
+    return _BRIDGE_DEFAULT_LANG
+
+
+def bridge_page_strings(lang: str) -> dict:
+    return _BRIDGE_PAGE_STRINGS.get(lang, _BRIDGE_PAGE_STRINGS[_BRIDGE_DEFAULT_LANG])

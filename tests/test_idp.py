@@ -59,6 +59,27 @@ async def test_authorize_shows_bridge_page(client, idp_ready):
     assert "email-form" in resp.text
 
 
+async def test_authorize_defaults_to_english(client, idp_ready):
+    resp = await client.get("/authorize", params=_authorize_params())
+    assert '<html lang="en">' in resp.text
+    assert "Enter your email to continue." in resp.text
+
+
+async def test_authorize_detects_spanish_from_accept_language(client, idp_ready):
+    resp = await client.get(
+        "/authorize", params=_authorize_params(), headers={"Accept-Language": "es-ES,es;q=0.9,en;q=0.8"},
+    )
+    assert '<html lang="es">' in resp.text
+    assert "Escribe tu email para continuar." in resp.text
+
+
+async def test_authorize_non_spanish_accept_language_defaults_to_english(client, idp_ready):
+    resp = await client.get(
+        "/authorize", params=_authorize_params(), headers={"Accept-Language": "fr-FR,fr;q=0.9"},
+    )
+    assert '<html lang="en">' in resp.text
+
+
 async def test_discovery_document(client, idp_ready):
     resp = await client.get("/.well-known/openid-configuration")
     assert resp.status_code == 200

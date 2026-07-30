@@ -1,4 +1,4 @@
-from app.messages import build_notification, extract_browser_name
+from app.messages import bridge_page_strings, build_notification, detect_browser_lang, extract_browser_name
 
 
 def test_extract_browser_name_drops_version_and_rest():
@@ -35,3 +35,29 @@ def test_build_notification_missing_user_agent_fields_does_not_crash():
     text = build_notification("es", {})
     assert "unknown browser" in text["body"]
     assert "unknown" in text["body"]
+
+
+def test_detect_browser_lang_spanish():
+    assert detect_browser_lang("es-ES,es;q=0.9,en;q=0.8") == "es"
+
+
+def test_detect_browser_lang_english():
+    assert detect_browser_lang("en-US,en;q=0.9") == "en"
+
+
+def test_detect_browser_lang_unsupported_defaults_to_english():
+    assert detect_browser_lang("fr-FR,fr;q=0.9") == "en"
+
+
+def test_detect_browser_lang_missing_header_defaults_to_english():
+    assert detect_browser_lang(None) == "en"
+
+
+def test_bridge_page_strings_spanish():
+    strings = bridge_page_strings("es")
+    assert strings["continue_button"] == "Continuar"
+
+
+def test_bridge_page_strings_unknown_falls_back_to_english():
+    strings = bridge_page_strings("de")
+    assert strings["continue_button"] == "Continue"

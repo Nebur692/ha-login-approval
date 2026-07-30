@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
   <meta charset="utf-8">
-  <title>Sign in</title>
+  <title>{{ strings.page_title }}</title>
   <style>
     body { font-family: sans-serif; max-width: 400px; margin: 10vh auto; text-align: center; padding: 0 1em; }
     input { width: 100%; padding: 0.5em; font-size: 1em; box-sizing: border-box; }
@@ -20,38 +20,39 @@
 </head>
 <body>
   <div id="email-step">
-    <p>Enter your email to continue.</p>
+    <p>{{ strings.email_prompt }}</p>
     <form id="email-form">
       <input type="email" id="email" name="email" required autofocus>
-      <button type="submit">Continue</button>
+      <button type="submit">{{ strings.continue_button }}</button>
     </form>
   </div>
 
   <div id="waiting-step">
     <div class="spinner"></div>
-    <p>Check your phone and approve the sign-in request…</p>
+    <p>{{ strings.waiting_message }}</p>
 
     <div id="escalation">
-      <p>Still nothing? You can:</p>
-      <button id="retry-button">Resend the notification</button>
-      <button id="show-recovery-button" class="secondary">Use a recovery code</button>
+      <p>{{ strings.still_nothing }}</p>
+      <button id="retry-button">{{ strings.resend_button }}</button>
+      <button id="show-recovery-button" class="secondary">{{ strings.recovery_button }}</button>
     </div>
   </div>
 
   <div id="recovery-step">
-    <p>Enter a one-time recovery code for your account.</p>
+    <p>{{ strings.recovery_prompt }}</p>
     <form id="recovery-form">
       <input type="hidden" id="recovery-request-id">
       <input type="text" id="recovery-code" name="code" placeholder="XXXX-XXXX-XXXX" required autofocus>
-      <button type="submit">Sign in with recovery code</button>
+      <button type="submit">{{ strings.recovery_submit_button }}</button>
     </form>
   </div>
 
   <p id="error"></p>
-  <button id="go-back-button" class="secondary" style="display:none;">← Back to login</button>
+  <button id="go-back-button" class="secondary" style="display:none;">{{ strings.go_back_button }}</button>
 
   <script>
     const requestId = "{{ request_id }}";
+    const STRINGS = {{ strings | tojson }};
     const POLL_INTERVAL_MS = 2000;
     let polling = false;
 
@@ -76,7 +77,7 @@
         body: new URLSearchParams({ request_id: requestId, email }),
       });
       if (!resp.ok) {
-        errorEl.innerText = "Something went wrong. Please try again.";
+        errorEl.innerText = STRINGS.error_generic;
         return;
       }
       showOnly(waitingStep);
@@ -111,7 +112,7 @@
         body: new URLSearchParams({ request_id: requestId, code }),
       });
       if (!resp.ok) {
-        errorEl.innerText = "That recovery code isn't valid.";
+        errorEl.innerText = STRINGS.error_recovery_invalid;
         return;
       }
       window.location.href = `/idp/complete/${requestId}`;
@@ -133,7 +134,7 @@
 
       const terminal = ["rejected", "timeout", "denied", "send_failed"];
       if (terminal.includes(data.status)) {
-        errorEl.innerText = "Sign-in was not approved.";
+        errorEl.innerText = STRINGS.error_not_approved;
         // Recovery/retry stay available — don't stop showing them, just
         // stop polling for an approval that already failed definitively.
         // The user always gets an explicit way back to the RP too, so the
