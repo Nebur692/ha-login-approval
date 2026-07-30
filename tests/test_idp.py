@@ -511,3 +511,65 @@ async def test_no_warning_when_codes_well_above_threshold(client, idp_ready, mon
     call_mock.assert_not_called()
 
 
+# --- /idp/fail: never leave the browser on a dead end --------------------
+
+async def test_fail_redirects_back_with_error_when_denied(client, idp_ready):
+    """Unknown email (or no devices assigned) ends up "denied" with no
+    recovery option at all — /idp/fail is the only way back in that case."""
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    await client.post("/idp/email", data={"request_id": request_id, "email": "nobody@example.com"})
+    await asyncio.sleep(0.05)
+
+    resp = await client.get(f"/idp/fail/{request_id}", follow_redirects=False)
+    assert resp.status_code == 302
+    location = resp.headers["location"]
+    assert location.startswith(REDIRECT_URI)
+    assert "error=access_denied" in location
+    assert "state=xyz" in location
+    # Consumed — the request is gone, matching /idp/complete's own behavior.
+    assert request_id not in idp_router._pending
+
+
+async def test_fail_redirects_back_after_explicit_reject(client, idp_ready):
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.REJECTED)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    resp = await client.get(f"/idp/fail/{request_id}", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "error=access_denied" in resp.headers["location"]
+
+
+async def test_fail_rejected_while_still_waiting(client, idp_ready):
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+    idp_router._pending[request_id]["status"] = "waiting"
+
+    resp = await client.get(f"/idp/fail/{request_id}")
+    assert resp.status_code == 409
+
+
+async def test_fail_rejected_once_approved(client, idp_ready):
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    resp = await client.get(f"/idp/fail/{request_id}")
+    assert resp.status_code == 409
+
+
+async def test_fail_unknown_request_404(client, idp_ready):
+    resp = await client.get("/idp/fail/does-not-exist")
+    assert resp.status_code == 404
+
+

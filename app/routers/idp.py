@@ -52,7 +52,7 @@ _pending: dict[str, dict] = {}
 _auth_codes: dict[str, dict] = {}
 _access_tokens: dict[str, dict] = {}
 
-_TERMINAL_STATUSES = {"approved", "rejected", "timeout", "denied", "send_failed"}
+_FAILURE_STATUSES = {"rejected", "timeout", "denied", "send_failed"}
 
 
 def _issuer() -> str:
@@ -311,6 +311,24 @@ async def complete(request_id: str):
 
     qs = f"code={code}&state={pending['state']}"
     return RedirectResponse(url=f"{pending['redirect_uri']}?{qs}", status_code=302)
+
+
+@router.get("/idp/fail/{request_id}")
+async def fail(request_id: str):
+    """The bridge page's "go back" action once a login has definitively
+    failed (unknown email, rejected, timed out, or send failed) — redirects
+    back to the RP with a standard OAuth2/OIDC error response instead of
+    leaving the browser stuck on a dead end page with nowhere to go."""
+    pending = _pending.get(request_id)
+    if pending is None:
+        raise HTTPException(status_code=404, detail="unknown or expired request")
+    if pending["status"] not in _FAILURE_STATUSES:
+        raise HTTPException(status_code=409, detail="this request hasn't failed (yet)")
+
+    qs = f"error=access_denied&state={pending['state']}"
+    redirect_uri = pending["redirect_uri"]
+    del _pending[request_id]
+    return RedirectResponse(url=f"{redirect_uri}?{qs}", status_code=302)
 
 
 def _parse_basic_auth(header: str | None) -> tuple[str, str] | None:

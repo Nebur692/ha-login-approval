@@ -48,6 +48,7 @@
   </div>
 
   <p id="error"></p>
+  <button id="go-back-button" class="secondary" style="display:none;">← Back to login</button>
 
   <script>
     const requestId = "{{ request_id }}";
@@ -92,6 +93,10 @@
       });
     });
 
+    document.getElementById("go-back-button").addEventListener("click", () => {
+      window.location.href = `/idp/fail/${requestId}`;
+    });
+
     document.getElementById("show-recovery-button").addEventListener("click", () => {
       document.getElementById("recovery-request-id").value = requestId;
       showOnly(recoveryStep);
@@ -131,6 +136,9 @@
         errorEl.innerText = "Sign-in was not approved.";
         // Recovery/retry stay available — don't stop showing them, just
         // stop polling for an approval that already failed definitively.
+        // The user always gets an explicit way back to the RP too, so the
+        // page never becomes a dead end with nothing to click.
+        document.getElementById("go-back-button").style.display = "inline-block";
         polling = false;
         return;
       }
