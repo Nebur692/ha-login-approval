@@ -113,6 +113,24 @@ async def test_full_flow_approved_issues_valid_id_token(client, idp_ready):
     assert userinfo_resp.status_code == 200
     assert userinfo_resp.json()["sub"] == EMAIL
 
+    # Real cryptographic round-trip, not just a structural claims check:
+    # the public key JWKS actually serves must validate this exact
+    # signature, matching what a real RP does before trusting the token.
+    import jwt as pyjwt
+    from jwt import PyJWK
+
+    jwks_resp = await client.get("/jwks.json")
+    assert jwks_resp.status_code == 200
+    jwk = jwks_resp.json()["keys"][0]
+    assert jwk["kid"] == pyjwt.get_unverified_header(body["id_token"])["kid"]
+
+    public_key = PyJWK.from_dict(jwk).key
+    verified_claims = pyjwt.decode(
+        body["id_token"], key=public_key, algorithms=["RS256"],
+        audience=CLIENT_ID, issuer="http://ha-login.test",
+    )
+    assert verified_claims["sub"] == EMAIL
+
 
 async def test_unknown_email_is_denied(client, idp_ready):
     """No account row at all for this email — accounts.get_targets()
@@ -439,6 +457,57 @@ async def test_low_recovery_codes_triggers_warning_notification(client, idp_read
     args = call_mock.call_args.args
     assert args[0] == "notify"
     assert args[1] == "mobile_app_x"
-    assert "0" in args[2]["message"] or "exhausted" in args[2]["title"].lower()
+    assert "exhausted" in args[2]["title"].lower()
+
+
+async def test_low_recovery_codes_warning_at_threshold_not_exhausted(client, idp_ready, monkeypatch):
+    """Distinct, less prominent treatment than exhausting the last code —
+    e.g. 4 generated, 1 used up front, 1 used via the flow below leaves 2,
+    still above zero but at/under the low-warning threshold."""
+    from app import recovery_codes
+
+    monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 0)
+    monkeypatch.setattr(settings, "recovery_code_low_warning", 3)
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    codes = await recovery_codes.generate_batch(db.get_db(), EMAIL, generated_by="admin", count=4)
+    await recovery_codes.verify_code(db.get_db(), EMAIL, codes[0], used_ip="1.2.3.4")
+
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    call_mock = AsyncMock()
+    with patch("app.routers.idp.ha_client.call_service", call_mock):
+        await client.post("/idp/recovery", data={"request_id": request_id, "code": codes[1]})
+
+    call_mock.assert_called_once()
+    args = call_mock.call_args.args
+    assert "exhausted" not in args[2]["title"].lower()
+    assert "2" in args[2]["message"]
+
+
+async def test_no_warning_when_codes_well_above_threshold(client, idp_ready, monkeypatch):
+    from app import recovery_codes
+
+    monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 0)
+    monkeypatch.setattr(settings, "recovery_code_low_warning", 3)
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    codes = await recovery_codes.generate_batch(db.get_db(), EMAIL, generated_by="admin", count=10)
+
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    call_mock = AsyncMock()
+    with patch("app.routers.idp.ha_client.call_service", call_mock):
+        await client.post("/idp/recovery", data={"request_id": request_id, "code": codes[0]})
+
+    call_mock.assert_not_called()
 
 
