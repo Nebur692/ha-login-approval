@@ -1,0 +1,42 @@
+{% extends "admin/base.html" %}
+{% block title %}Accounts{% endblock %}
+{% block content %}
+<h1>Passwordless accounts</h1>
+<p class="muted">Accounts used by the passwordless OIDC flow — independent of any relying party
+   (ZITADEL, Keycloak, Authentik, ...). An account with no device checked can never complete a
+   passwordless login.</p>
+
+{% if not mobile_targets %}
+  <p class="empty">No notify.mobile_app_* device found in Home Assistant.</p>
+{% endif %}
+
+<div class="card">
+  <h2>Add account</h2>
+  <form method="post" action="/admin/accounts/save">
+    <input type="email" name="email" placeholder="person@example.com" required style="width:100%; padding:0.4rem; box-sizing:border-box;">
+    {% for target in mobile_targets %}
+    <label style="display:block; font-family: monospace; font-size: 0.9rem;">
+      <input type="checkbox" name="targets" value="{{ target }}">
+      {{ target }}
+    </label>
+    {% endfor %}
+    <button type="submit">Save</button>
+  </form>
+</div>
+
+{% for row in rows %}
+<div class="card">
+  <h2>{{ row.email }}</h2>
+  <form method="post" action="/admin/accounts/save">
+    <input type="hidden" name="email" value="{{ row.email }}">
+    {% for target in mobile_targets %}
+    <label style="display:block; font-family: monospace; font-size: 0.9rem;">
+      <input type="checkbox" name="targets" value="{{ target }}" {% if target in row.targets %}checked{% endif %}>
+      {{ target }}
+    </label>
+    {% endfor %}
+    <button type="submit">Save</button>
+  </form>
+</div>
+{% endfor %}
+{% endblock %}

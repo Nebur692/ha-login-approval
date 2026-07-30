@@ -3,13 +3,14 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app import db
+from app import accounts, db
 from app.config import settings
 
 AUTH = {"Authorization": "Basic " + base64.b64encode(b"admin:test-admin-password").decode()}
 
 ADMIN_ROUTES = [
     ("GET", "/admin"),
+    ("GET", "/admin/accounts"),
     ("GET", "/admin/devices"),
     ("GET", "/admin/audit"),
     ("GET", "/admin/recovery"),
@@ -17,7 +18,7 @@ ADMIN_ROUTES = [
     ("GET", "/admin/branding"),
 ]
 
-FAKE_USERS = [
+FAKE_ZITADEL_USERS = [
     {"id": "u1", "username": "alice@example.com", "display_name": "Alice", "email": "alice@example.com", "is_machine": False},
 ]
 
@@ -33,35 +34,44 @@ async def admin_ready(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("method,path", ADMIN_ROUTES)
 async def test_every_admin_route_requires_basic_auth(client, admin_ready, method, path):
-    with patch("app.routers.admin.home.zitadel_client.list_users", AsyncMock(return_value=[])), \
-         patch("app.routers.admin.devices.ha_client.get_notify_targets", AsyncMock(return_value=[])), \
+    with patch("app.routers.admin.devices.ha_client.get_notify_targets", AsyncMock(return_value=[])), \
          patch("app.routers.admin.devices.zitadel_client.list_users", AsyncMock(return_value=[])), \
-         patch("app.routers.admin.audit.zitadel_client.list_users", AsyncMock(return_value=[])), \
-         patch("app.routers.admin.recovery.zitadel_client.list_users", AsyncMock(return_value=[])), \
-         patch("app.routers.admin.home.recovery_codes.remaining_count", AsyncMock(return_value=0)), \
-         patch("app.routers.admin.home.ip_blocking.list_blocked", AsyncMock(return_value=[])):
+         patch("app.routers.admin.accounts.ha_client.get_notify_targets", AsyncMock(return_value=[])):
         resp = await client.request(method, path)
     assert resp.status_code == 401
 
 
 async def test_home_page_shows_counts(client, admin_ready):
-    with patch("app.routers.admin.home.zitadel_client.list_users", AsyncMock(return_value=FAKE_USERS)), \
-         patch("app.routers.admin.home.zitadel_client.get_user_ha_targets", AsyncMock(return_value=["mobile_app_x"])), \
-         patch("app.routers.admin.home.ip_blocking.list_blocked", AsyncMock(return_value=[])):
-        resp = await client.get("/admin", headers=AUTH)
+    await accounts.set_targets(db.get_db(), "alice@example.com", ["mobile_app_x"])
+    resp = await client.get("/admin", headers=AUTH)
     assert resp.status_code == 200
-    assert "1 account" in resp.text or "Alice" in resp.text or "1 account(s)" in resp.text
+    assert "1 account" in resp.text or "alice@example.com" in resp.text
 
 
-async def test_devices_page_shows_linked_column(client, admin_ready):
+async def test_accounts_page_add_and_list(client, admin_ready):
+    with patch("app.routers.admin.accounts.ha_client.get_notify_targets", AsyncMock(return_value=["mobile_app_x"])):
+        resp = await client.post(
+            "/admin/accounts/save",
+            data={"email": "Alice@Example.com", "targets": ["mobile_app_x"]},
+            headers=AUTH,
+            follow_redirects=False,
+        )
+    assert resp.status_code == 303
+    assert await accounts.get_targets(db.get_db(), "alice@example.com") == ["mobile_app_x"]
+
+    with patch("app.routers.admin.accounts.ha_client.get_notify_targets", AsyncMock(return_value=["mobile_app_x"])):
+        page = await client.get("/admin/accounts", headers=AUTH)
+    assert "alice@example.com" in page.text
+
+
+async def test_devices_page_shows_passwordless_cross_reference(client, admin_ready):
+    await accounts.set_targets(db.get_db(), "alice@example.com", ["mobile_app_x"])
     with patch("app.routers.admin.devices.ha_client.get_notify_targets", AsyncMock(return_value=["mobile_app_x"])), \
-         patch("app.routers.admin.devices.zitadel_client.list_users", AsyncMock(return_value=FAKE_USERS)), \
-         patch("app.routers.admin.devices.zitadel_client.get_user_ha_targets", AsyncMock(return_value=[])), \
-         patch("app.config.settings.zitadel_idp_resource_id", "idp-123"), \
-         patch("app.routers.admin.devices.zitadel_client.get_user_linked_idp_ids", AsyncMock(return_value=["idp-123"])):
+         patch("app.routers.admin.devices.zitadel_client.list_users", AsyncMock(return_value=FAKE_ZITADEL_USERS)), \
+         patch("app.routers.admin.devices.zitadel_client.get_user_ha_targets", AsyncMock(return_value=[])):
         resp = await client.get("/admin/devices", headers=AUTH)
     assert resp.status_code == 200
-    assert "Linked to HA: yes" in resp.text
+    assert "Has a passwordless account too: yes" in resp.text
 
 
 async def test_devices_save(client, admin_ready):
@@ -77,51 +87,52 @@ async def test_devices_save(client, admin_ready):
 
 
 async def test_audit_page_lists_events(client, admin_ready):
-    await __import__("app.audit", fromlist=["log_event"]).log_event(
-        db.get_db(), "u1", "req-1", "approved", ip="1.2.3.4"
-    )
-    with patch("app.routers.admin.audit.zitadel_client.list_users", AsyncMock(return_value=FAKE_USERS)):
-        resp = await client.get("/admin/audit?user_id=u1", headers=AUTH)
+    from app import audit as audit_log
+
+    await accounts.set_targets(db.get_db(), "alice@example.com", ["mobile_app_x"])
+    await audit_log.log_event(db.get_db(), "alice@example.com", "req-1", "approved", ip="1.2.3.4")
+
+    resp = await client.get("/admin/audit?account_id=alice@example.com", headers=AUTH)
     assert resp.status_code == 200
     assert "approved" in resp.text
     assert "1.2.3.4" in resp.text
 
 
 async def test_recovery_generate_shows_codes_once(client, admin_ready):
-    with patch("app.routers.admin.recovery.zitadel_client.list_users", AsyncMock(return_value=FAKE_USERS)):
-        resp = await client.post("/admin/recovery/generate", data={"user_id": "u1"}, headers=AUTH)
+    await accounts.set_targets(db.get_db(), "alice@example.com", ["mobile_app_x"])
+    resp = await client.post("/admin/recovery/generate", data={"email": "alice@example.com"}, headers=AUTH)
     assert resp.status_code == 200
-    assert "New codes for Alice" in resp.text
+    assert "New codes for alice@example.com" in resp.text
 
 
 async def test_recovery_regenerate_invalidates_previous_batch(client, admin_ready):
     from app import recovery_codes
 
-    first_batch = await recovery_codes.generate_batch(db.get_db(), "u1", generated_by="admin")
-    with patch("app.routers.admin.recovery.zitadel_client.list_users", AsyncMock(return_value=FAKE_USERS)):
-        await client.post("/admin/recovery/generate", data={"user_id": "u1"}, headers=AUTH)
+    await accounts.set_targets(db.get_db(), "alice@example.com", ["mobile_app_x"])
+    first_batch = await recovery_codes.generate_batch(db.get_db(), "alice@example.com", generated_by="admin")
+    await client.post("/admin/recovery/generate", data={"email": "alice@example.com"}, headers=AUTH)
 
-    assert await recovery_codes.verify_code(db.get_db(), "u1", first_batch[0], used_ip="1.2.3.4") is False
+    assert await recovery_codes.verify_code(db.get_db(), "alice@example.com", first_batch[0], used_ip="1.2.3.4") is False
 
 
 async def test_blocked_ips_list_and_unblock(client, admin_ready):
     from app import ip_blocking
 
     for _ in range(3):
-        await ip_blocking.record_failure(db.get_db(), "u1", "203.0.113.5")
-    assert await ip_blocking.is_blocked(db.get_db(), "u1", "203.0.113.5") is True
+        await ip_blocking.record_failure(db.get_db(), "alice@example.com", "203.0.113.5")
+    assert await ip_blocking.is_blocked(db.get_db(), "alice@example.com", "203.0.113.5") is True
 
     resp = await client.get("/admin/blocked-ips", headers=AUTH)
     assert "203.0.113.5" in resp.text
 
     unblock_resp = await client.post(
         "/admin/blocked-ips/unblock",
-        data={"zitadel_user_id": "u1", "ip": "203.0.113.5"},
+        data={"account_id": "alice@example.com", "ip": "203.0.113.5"},
         headers=AUTH,
         follow_redirects=False,
     )
     assert unblock_resp.status_code == 303
-    assert await ip_blocking.is_blocked(db.get_db(), "u1", "203.0.113.5") is False
+    assert await ip_blocking.is_blocked(db.get_db(), "alice@example.com", "203.0.113.5") is False
 
 
 async def test_branding_save_and_reload(client, admin_ready):

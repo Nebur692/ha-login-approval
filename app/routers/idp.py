@@ -1,5 +1,12 @@
 """Passwordless OIDC provider (v2.0.0): this service acts as a generic
-external IDP that ZITADEL (or any OIDC-capable RP) redirects to.
+external IDP that ZITADEL, Keycloak, Authentik — any standard OIDC relying
+party — can redirect to. Deliberately independent of any specific RP's
+admin API: accounts are resolved through our own directory (accounts.py),
+never through zitadel_client.py (that module exists only for the legacy,
+inherently ZITADEL-specific Actions V2 webhook in routers/webhook.py).
+`sub` in the id_token is simply the account's normalized email — the only
+identity concept this service has of its own, and the value the RP's
+external-IDP link should be configured to match.
 
 Confirmed empirically against a real ZITADEL instance before writing this
 (see Fase 1 of the v2.0.0 plan): `login_hint` never arrives (a known,
@@ -29,7 +36,7 @@ from fastapi import APIRouter, Form, Header, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import idp_jwt, recovery_codes, zitadel_client
+from app import accounts, idp_jwt, recovery_codes
 from app.approval_flow import ApprovalOutcome, LoginContext, run_approval
 from app.config import settings
 from app.db import get_db
@@ -98,7 +105,7 @@ async def authorize(
         "created_at": time.time(),
         "status": "awaiting_email",
         "email": login_hint,
-        "zitadel_user_id": None,
+        "account_id": None,
         "ip": request.client.host if request.client else "unknown",
         "user_agent": request.headers.get("user-agent", ""),
     }
@@ -116,24 +123,20 @@ _OUTCOME_TO_STATUS = {
     ApprovalOutcome.APPROVED: "approved",
     ApprovalOutcome.REJECTED: "rejected",
     ApprovalOutcome.TIMEOUT: "timeout",
-    # Unlike the legacy webhook (routers/webhook.py), NO_TARGETS must deny
-    # here — there is no password fallback in this flow, so an account with
-    # no HA devices assigned can never complete a passwordless login.
-    ApprovalOutcome.NO_TARGETS: "denied",
     ApprovalOutcome.SEND_FAILED: "send_failed",
 }
 
 
-async def _run_notify_and_wait(request_id: str) -> None:
+async def _run_notify_and_wait(request_id: str, targets: list[str]) -> None:
     """(Re)sends the HA notification and waits for a response — shared by
     the first attempt and by /idp/retry, both of which already know the
-    resolved zitadel_user_id."""
+    resolved account_id and its assigned targets."""
     pending = _pending[request_id]
     pending["status"] = "waiting"
     pending["waiting_since"] = time.time()
 
     context = LoginContext(ip=pending["ip"], browser_description=pending["user_agent"])
-    outcome = await run_approval(pending["zitadel_user_id"], request_id, context)
+    outcome = await run_approval(targets, request_id, context)
     pending["status"] = _OUTCOME_TO_STATUS[outcome]
 
 
@@ -142,21 +145,26 @@ async def _start_approval(request_id: str, email: str) -> None:
     if pending is None:
         return
 
-    user = await zitadel_client.find_user_by_login(email)
-    if user is None:
+    db = get_db()
+    targets = await accounts.get_targets(db, email)
+    if not targets:
+        # No account configured for this email, or no HA devices assigned
+        # to it — there is no password fallback in this flow, so it must
+        # deny rather than let the login through (unlike the legacy
+        # webhook, where this same situation just means "no 2FA set up").
         pending["status"] = "denied"
         return
 
     pending["email"] = email
-    pending["zitadel_user_id"] = user["id"]
-    await _run_notify_and_wait(request_id)
+    pending["account_id"] = email.strip().lower()
+    await _run_notify_and_wait(request_id, targets)
 
 
 def _recovery_available(pending: dict) -> bool:
     """Server-side gate for the recovery-code form: never reachable before
     a real attempt was made to notify the account, and only ever for a
-    request that got as far as resolving a real ZITADEL user."""
-    if pending.get("zitadel_user_id") is None:
+    request that got as far as resolving a real account."""
+    if pending.get("account_id") is None:
         return False
     if pending["status"] == "send_failed":
         return True
@@ -200,7 +208,8 @@ async def retry(request_id: str = Form(...)):
     if not _recovery_available(pending):
         raise HTTPException(status_code=403, detail="retry not available yet")
 
-    asyncio.create_task(_run_notify_and_wait(request_id))
+    targets = await accounts.get_targets(get_db(), pending["email"])
+    asyncio.create_task(_run_notify_and_wait(request_id, targets))
     return {"status": "waiting"}
 
 
@@ -215,7 +224,7 @@ async def submit_recovery_code(request: Request, request_id: str = Form(...), co
         raise HTTPException(status_code=403, detail="recovery code not available yet")
 
     ip = request.client.host if request.client else "unknown"
-    valid = await recovery_codes.verify_code(get_db(), pending["zitadel_user_id"], code, used_ip=ip)
+    valid = await recovery_codes.verify_code(get_db(), pending["account_id"], code, used_ip=ip)
     if not valid:
         raise HTTPException(status_code=401, detail="invalid recovery code")
 
@@ -234,7 +243,7 @@ async def complete(request_id: str):
     code = uuid.uuid4().hex
     _auth_codes[code] = {
         "client_id": pending["client_id"],
-        "zitadel_user_id": pending["zitadel_user_id"],
+        "account_id": pending["account_id"],
         "email": pending["email"],
         "issued_at": time.time(),
     }
@@ -281,11 +290,11 @@ async def token(
     id_token = idp_jwt.build_id_token(
         issuer=_issuer(),
         audience=entry["client_id"],
-        subject=entry["zitadel_user_id"],
+        subject=entry["account_id"],
         email=entry["email"],
     )
     access_token = uuid.uuid4().hex
-    _access_tokens[access_token] = {"sub": entry["zitadel_user_id"], "email": entry["email"]}
+    _access_tokens[access_token] = {"sub": entry["account_id"], "email": entry["email"]}
     return {
         "access_token": access_token,
         "token_type": "Bearer",

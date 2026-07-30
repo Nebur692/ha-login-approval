@@ -4,7 +4,7 @@ after password/IdP verification succeeds, before the user is actually
 logged in. Returning a non-2xx status here aborts the login."""
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from app import ha_client
+from app import ha_client, zitadel_client
 from app.approval_flow import ApprovalOutcome, LoginContext, run_approval
 from app.config import settings
 from app.zitadel_signature import verify as verify_signature
@@ -28,16 +28,23 @@ async def create_session_hook(
         # nothing for us to gate, let it through unchanged.
         return {}
 
+    # ZITADEL-specific resolution (Actions V2 has no equivalent elsewhere,
+    # so this legacy flow keeps using zitadel_client directly, unlike the
+    # passwordless IDP flow which resolves targets via accounts.py instead).
+    targets = await zitadel_client.get_user_ha_targets(user_id)
+    if not targets:
+        # No second factor configured for this account — this webhook runs
+        # *before* the password is checked, so letting it through here
+        # doesn't skip authentication, unlike the passwordless IDP flow.
+        return {}
+
     request_id = ha_client.new_request_id()
     user_agent = payload.get("request", {}).get("userAgent", {})
     context = LoginContext(ip=user_agent.get("ip", "unknown"), browser_description=user_agent.get("description", ""))
 
-    outcome = await run_approval(user_id, request_id, context)
+    outcome = await run_approval(targets, request_id, context)
 
-    # NO_TARGETS: no second factor configured for this account — this
-    # webhook runs *before* the password is checked, so letting it through
-    # here doesn't skip authentication, unlike the passwordless IDP flow.
-    if outcome in (ApprovalOutcome.APPROVED, ApprovalOutcome.NO_TARGETS):
+    if outcome == ApprovalOutcome.APPROVED:
         return {}
     if outcome == ApprovalOutcome.REJECTED:
         raise HTTPException(status_code=403, detail="Login rejected from Home Assistant")

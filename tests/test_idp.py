@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app import db, idp_jwt
+from app import accounts, db, idp_jwt
 from app.approval_flow import ApprovalOutcome
 from app.config import settings
 from app.routers import idp as idp_router
@@ -12,6 +12,7 @@ from app.routers import idp as idp_router
 CLIENT_ID = "test-rp"
 CLIENT_SECRET = "test-rp-secret"
 REDIRECT_URI = "https://rp.test/idps/callback"
+EMAIL = "test@example.com"
 
 
 @pytest.fixture
@@ -67,14 +68,14 @@ async def test_discovery_document(client, idp_ready):
 
 
 async def test_full_flow_approved_issues_valid_id_token(client, idp_ready):
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+
     authorize_resp = await client.get("/authorize", params=_authorize_params())
     request_id = idp_router._pending.copy().popitem()[0]
     assert authorize_resp.status_code == 200
 
-    fake_user = {"id": "u1", "username": "test@example.com", "email": "test@example.com", "is_machine": False}
-    with patch("app.routers.idp.zitadel_client.find_user_by_login", AsyncMock(return_value=fake_user)), \
-         patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)):
-        email_resp = await client.post("/idp/email", data={"request_id": request_id, "email": "test@example.com"})
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)):
+        email_resp = await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
         assert email_resp.status_code == 200
         # The email endpoint fires the approval as a background task
         # (asyncio.create_task) so the browser can start polling right
@@ -103,39 +104,39 @@ async def test_full_flow_approved_issues_valid_id_token(client, idp_ready):
 
     import jwt as pyjwt
     claims = pyjwt.decode(body["id_token"], options={"verify_signature": False})
-    assert claims["sub"] == "u1"
-    assert claims["email"] == "test@example.com"
+    assert claims["sub"] == EMAIL
+    assert claims["email"] == EMAIL
     assert claims["aud"] == CLIENT_ID
     assert claims["iss"] == "http://ha-login.test"
 
     userinfo_resp = await client.get("/userinfo", headers={"Authorization": f"Bearer {body['access_token']}"})
     assert userinfo_resp.status_code == 200
-    assert userinfo_resp.json()["sub"] == "u1"
+    assert userinfo_resp.json()["sub"] == EMAIL
 
 
 async def test_unknown_email_is_denied(client, idp_ready):
+    """No account row at all for this email — accounts.get_targets()
+    returns [] just like an account with no devices assigned."""
     await client.get("/authorize", params=_authorize_params())
     request_id = idp_router._pending.copy().popitem()[0]
 
-    with patch("app.routers.idp.zitadel_client.find_user_by_login", AsyncMock(return_value=None)):
-        await client.post("/idp/email", data={"request_id": request_id, "email": "nobody@example.com"})
-        await asyncio.sleep(0.05)
+    await client.post("/idp/email", data={"request_id": request_id, "email": "nobody@example.com"})
+    await asyncio.sleep(0.05)
 
     status_resp = await client.get(f"/idp/status/{request_id}")
     assert status_resp.json()["status"] == "denied"
 
 
 async def test_no_targets_denies_passwordless_login(client, idp_ready):
-    """Unlike the legacy webhook, NO_TARGETS must deny — there's no password
-    fallback in this flow."""
+    """An account exists but has no devices assigned — must still deny,
+    unlike the legacy webhook where this just means "no 2FA configured"."""
+    await accounts.set_targets(db.get_db(), EMAIL, [])
+
     await client.get("/authorize", params=_authorize_params())
     request_id = idp_router._pending.copy().popitem()[0]
 
-    fake_user = {"id": "u1", "username": "test@example.com", "email": "test@example.com", "is_machine": False}
-    with patch("app.routers.idp.zitadel_client.find_user_by_login", AsyncMock(return_value=fake_user)), \
-         patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.NO_TARGETS)):
-        await client.post("/idp/email", data={"request_id": request_id, "email": "test@example.com"})
-        await asyncio.sleep(0.05)
+    await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+    await asyncio.sleep(0.05)
 
     status_resp = await client.get(f"/idp/status/{request_id}")
     assert status_resp.json()["status"] == "denied"
@@ -164,25 +165,25 @@ async def test_userinfo_requires_bearer(client, idp_ready):
 
 # --- Fase 6: recovery/retry gate ------------------------------------------
 
-def test_recovery_unavailable_without_resolved_user():
-    pending = {"zitadel_user_id": None, "status": "waiting", "waiting_since": time.time() - 1000}
+def test_recovery_unavailable_without_resolved_account():
+    pending = {"account_id": None, "status": "waiting", "waiting_since": time.time() - 1000}
     assert idp_router._recovery_available(pending) is False
 
 
 def test_recovery_available_on_send_failed_regardless_of_elapsed_time():
-    pending = {"zitadel_user_id": "u1", "status": "send_failed", "waiting_since": time.time()}
+    pending = {"account_id": EMAIL, "status": "send_failed", "waiting_since": time.time()}
     assert idp_router._recovery_available(pending) is True
 
 
 def test_recovery_unavailable_before_delay_elapses(monkeypatch):
     monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 60)
-    pending = {"zitadel_user_id": "u1", "status": "waiting", "waiting_since": time.time()}
+    pending = {"account_id": EMAIL, "status": "waiting", "waiting_since": time.time()}
     assert idp_router._recovery_available(pending) is False
 
 
 def test_recovery_available_after_delay_elapses(monkeypatch):
     monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 60)
-    pending = {"zitadel_user_id": "u1", "status": "waiting", "waiting_since": time.time() - 61}
+    pending = {"account_id": EMAIL, "status": "waiting", "waiting_since": time.time() - 61}
     assert idp_router._recovery_available(pending) is True
 
 
@@ -207,13 +208,12 @@ async def test_send_failed_makes_recovery_immediately_available(client, idp_read
     """Even with the default (non-zero) unlock delay, SEND_FAILED unlocks
     recovery right away — no point waiting out a timer for a notification
     that was never delivered."""
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
     await client.get("/authorize", params=_authorize_params())
     request_id = idp_router._pending.copy().popitem()[0]
 
-    fake_user = {"id": "u1", "username": "test@example.com", "email": "test@example.com", "is_machine": False}
-    with patch("app.routers.idp.zitadel_client.find_user_by_login", AsyncMock(return_value=fake_user)), \
-         patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.SEND_FAILED)):
-        await client.post("/idp/email", data={"request_id": request_id, "email": "test@example.com"})
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.SEND_FAILED)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
         await asyncio.sleep(0.05)
 
     status_resp = await client.get(f"/idp/status/{request_id}")
@@ -223,13 +223,12 @@ async def test_send_failed_makes_recovery_immediately_available(client, idp_read
 
 async def test_recovery_code_completes_login_after_timeout(client, idp_ready, monkeypatch):
     monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 0)
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
     await client.get("/authorize", params=_authorize_params())
     request_id = idp_router._pending.copy().popitem()[0]
 
-    fake_user = {"id": "u1", "username": "test@example.com", "email": "test@example.com", "is_machine": False}
-    with patch("app.routers.idp.zitadel_client.find_user_by_login", AsyncMock(return_value=fake_user)), \
-         patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
-        await client.post("/idp/email", data={"request_id": request_id, "email": "test@example.com"})
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
         await asyncio.sleep(0.05)
 
     status_resp = await client.get(f"/idp/status/{request_id}")
@@ -246,13 +245,12 @@ async def test_recovery_code_completes_login_after_timeout(client, idp_ready, mo
 
 async def test_recovery_code_wrong_code_rejected(client, idp_ready, monkeypatch):
     monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 0)
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
     await client.get("/authorize", params=_authorize_params())
     request_id = idp_router._pending.copy().popitem()[0]
 
-    fake_user = {"id": "u1", "username": "test@example.com", "email": "test@example.com", "is_machine": False}
-    with patch("app.routers.idp.zitadel_client.find_user_by_login", AsyncMock(return_value=fake_user)), \
-         patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
-        await client.post("/idp/email", data={"request_id": request_id, "email": "test@example.com"})
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
         await asyncio.sleep(0.05)
 
     with patch("app.routers.idp.recovery_codes.verify_code", AsyncMock(return_value=False)):
@@ -262,13 +260,12 @@ async def test_recovery_code_wrong_code_rejected(client, idp_ready, monkeypatch)
 
 async def test_retry_resends_notification(client, idp_ready, monkeypatch):
     monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 0)
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
     await client.get("/authorize", params=_authorize_params())
     request_id = idp_router._pending.copy().popitem()[0]
 
-    fake_user = {"id": "u1", "username": "test@example.com", "email": "test@example.com", "is_machine": False}
-    with patch("app.routers.idp.zitadel_client.find_user_by_login", AsyncMock(return_value=fake_user)), \
-         patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
-        await client.post("/idp/email", data={"request_id": request_id, "email": "test@example.com"})
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
         await asyncio.sleep(0.05)
 
     run_approval_mock = AsyncMock(return_value=ApprovalOutcome.APPROVED)
@@ -284,13 +281,12 @@ async def test_retry_resends_notification(client, idp_ready, monkeypatch):
 
 async def test_retry_rejected_once_already_approved(client, idp_ready, monkeypatch):
     monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 0)
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
     await client.get("/authorize", params=_authorize_params())
     request_id = idp_router._pending.copy().popitem()[0]
 
-    fake_user = {"id": "u1", "username": "test@example.com", "email": "test@example.com", "is_machine": False}
-    with patch("app.routers.idp.zitadel_client.find_user_by_login", AsyncMock(return_value=fake_user)), \
-         patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)):
-        await client.post("/idp/email", data={"request_id": request_id, "email": "test@example.com"})
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
         await asyncio.sleep(0.05)
 
     resp = await client.post("/idp/retry", data={"request_id": request_id})

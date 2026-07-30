@@ -26,7 +26,7 @@ def _generate_code() -> str:
     return "-".join(groups)
 
 
-async def generate_batch(db, zitadel_user_id: str, generated_by: str,
+async def generate_batch(db, account_id: str, generated_by: str,
                           count: int | None = None) -> list[str]:
     """Generates a new batch of codes, invalidating every code from any
     previous generation for this account. Returns the plaintext codes —
@@ -35,8 +35,8 @@ async def generate_batch(db, zitadel_user_id: str, generated_by: str,
     now = datetime.now(timezone.utc).isoformat()
 
     cursor = await db.execute(
-        "SELECT current_generation FROM recovery_code_generations WHERE zitadel_user_id = ?",
-        (zitadel_user_id,),
+        "SELECT current_generation FROM recovery_code_generations WHERE account_id = ?",
+        (account_id,),
     )
     row = await cursor.fetchone()
     new_generation = (row["current_generation"] + 1) if row else 1
@@ -44,15 +44,15 @@ async def generate_batch(db, zitadel_user_id: str, generated_by: str,
     if row:
         await db.execute(
             "UPDATE recovery_code_generations SET current_generation = ?, generated_at = ?, "
-            "generated_by = ?, code_count = ? WHERE zitadel_user_id = ?",
-            (new_generation, now, generated_by, count, zitadel_user_id),
+            "generated_by = ?, code_count = ? WHERE account_id = ?",
+            (new_generation, now, generated_by, count, account_id),
         )
     else:
         await db.execute(
             "INSERT INTO recovery_code_generations "
-            "(zitadel_user_id, current_generation, generated_at, generated_by, code_count) "
+            "(account_id, current_generation, generated_at, generated_by, code_count) "
             "VALUES (?, ?, ?, ?, ?)",
-            (zitadel_user_id, new_generation, now, generated_by, count),
+            (account_id, new_generation, now, generated_by, count),
         )
 
     codes = []
@@ -60,21 +60,21 @@ async def generate_batch(db, zitadel_user_id: str, generated_by: str,
         code = _generate_code()
         codes.append(code)
         await db.execute(
-            "INSERT INTO recovery_codes (zitadel_user_id, code_hash, generation, created_at) "
+            "INSERT INTO recovery_codes (account_id, code_hash, generation, created_at) "
             "VALUES (?, ?, ?, ?)",
-            (zitadel_user_id, _hasher.hash(code), new_generation, now),
+            (account_id, _hasher.hash(code), new_generation, now),
         )
     await db.commit()
     return codes
 
 
-async def verify_code(db, zitadel_user_id: str, code: str, used_ip: str) -> bool:
+async def verify_code(db, account_id: str, code: str, used_ip: str) -> bool:
     """Checks `code` against this account's current generation of unused
     codes. On success, marks that specific code used (never reusable
     again) and returns True."""
     cursor = await db.execute(
-        "SELECT current_generation FROM recovery_code_generations WHERE zitadel_user_id = ?",
-        (zitadel_user_id,),
+        "SELECT current_generation FROM recovery_code_generations WHERE account_id = ?",
+        (account_id,),
     )
     gen_row = await cursor.fetchone()
     if gen_row is None:
@@ -82,8 +82,8 @@ async def verify_code(db, zitadel_user_id: str, code: str, used_ip: str) -> bool
 
     cursor = await db.execute(
         "SELECT id, code_hash FROM recovery_codes "
-        "WHERE zitadel_user_id = ? AND generation = ? AND used_at IS NULL",
-        (zitadel_user_id, gen_row["current_generation"]),
+        "WHERE account_id = ? AND generation = ? AND used_at IS NULL",
+        (account_id, gen_row["current_generation"]),
     )
     candidates = await cursor.fetchall()
 
@@ -101,10 +101,10 @@ async def verify_code(db, zitadel_user_id: str, code: str, used_ip: str) -> bool
     return False
 
 
-async def remaining_count(db, zitadel_user_id: str) -> int:
+async def remaining_count(db, account_id: str) -> int:
     cursor = await db.execute(
-        "SELECT current_generation FROM recovery_code_generations WHERE zitadel_user_id = ?",
-        (zitadel_user_id,),
+        "SELECT current_generation FROM recovery_code_generations WHERE account_id = ?",
+        (account_id,),
     )
     gen_row = await cursor.fetchone()
     if gen_row is None:
@@ -112,7 +112,7 @@ async def remaining_count(db, zitadel_user_id: str) -> int:
 
     cursor = await db.execute(
         "SELECT COUNT(*) AS n FROM recovery_codes "
-        "WHERE zitadel_user_id = ? AND generation = ? AND used_at IS NULL",
-        (zitadel_user_id, gen_row["current_generation"]),
+        "WHERE account_id = ? AND generation = ? AND used_at IS NULL",
+        (account_id, gen_row["current_generation"]),
     )
     return (await cursor.fetchone())["n"]

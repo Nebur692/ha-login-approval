@@ -16,11 +16,11 @@
   <tr><th>Account</th><th>Remaining</th><th></th></tr>
   {% for row in rows %}
   <tr>
-    <td>{{ row.display_name }}</td>
+    <td>{{ row.email }}</td>
     <td class="{% if row.remaining <= 3 %}warn{% endif %}">{{ row.remaining }}</td>
     <td>
       <form method="post" action="/admin/recovery/generate" style="margin:0;">
-        <input type="hidden" name="user_id" value="{{ row.id }}">
+        <input type="hidden" name="email" value="{{ row.email }}">
         <button type="submit">{% if row.remaining %}Regenerate{% else %}Generate{% endif %}</button>
       </form>
     </td>

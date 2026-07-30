@@ -12,12 +12,12 @@
   <tr><th>Account</th><th>IP</th><th>Blocked at</th><th></th></tr>
   {% for b in blocked %}
   <tr>
-    <td>{{ b.zitadel_user_id }}</td>
+    <td>{{ b.account_id }}</td>
     <td>{{ b.ip }}</td>
     <td>{{ b.blocked_at }}</td>
     <td>
       <form method="post" action="/admin/blocked-ips/unblock" style="margin:0;">
-        <input type="hidden" name="zitadel_user_id" value="{{ b.zitadel_user_id }}">
+        <input type="hidden" name="account_id" value="{{ b.account_id }}">
         <input type="hidden" name="ip" value="{{ b.ip }}">
         <button type="submit">Unblock</button>
       </form>

@@ -19,7 +19,7 @@ async def test_generate_batch_returns_plaintext_codes_not_stored_in_plaintext(te
     assert len(codes) == 5
     assert len(set(codes)) == 5  # no duplicates in one batch
 
-    cursor = await temp_db.execute("SELECT code_hash FROM recovery_codes WHERE zitadel_user_id = ?", (USER,))
+    cursor = await temp_db.execute("SELECT code_hash FROM recovery_codes WHERE account_id = ?", (USER,))
     rows = await cursor.fetchall()
     stored_hashes = {r["code_hash"] for r in rows}
     assert not (stored_hashes & set(codes))  # plaintext never stored as-is

@@ -44,21 +44,21 @@ async def test_init_db_is_idempotent(tmp_path, monkeypatch):
 async def test_ip_block_state_scoped_to_account_and_ip(temp_db):
     """Composite primary key: same IP can be tracked independently per account."""
     await temp_db.execute(
-        "INSERT INTO ip_block_state (zitadel_user_id, ip, consecutive_failures) VALUES (?, ?, ?)",
+        "INSERT INTO ip_block_state (account_id, ip, consecutive_failures) VALUES (?, ?, ?)",
         ("user-a", "203.0.113.5", 1),
     )
     await temp_db.execute(
-        "INSERT INTO ip_block_state (zitadel_user_id, ip, consecutive_failures) VALUES (?, ?, ?)",
+        "INSERT INTO ip_block_state (account_id, ip, consecutive_failures) VALUES (?, ?, ?)",
         ("user-b", "203.0.113.5", 3),
     )
     await temp_db.commit()
 
     cursor = await temp_db.execute(
-        "SELECT zitadel_user_id, consecutive_failures FROM ip_block_state WHERE ip = ? ORDER BY zitadel_user_id",
+        "SELECT account_id, consecutive_failures FROM ip_block_state WHERE ip = ? ORDER BY account_id",
         ("203.0.113.5",),
     )
     rows = await cursor.fetchall()
-    assert [(r["zitadel_user_id"], r["consecutive_failures"]) for r in rows] == [
+    assert [(r["account_id"], r["consecutive_failures"]) for r in rows] == [
         ("user-a", 1),
         ("user-b", 3),
     ]

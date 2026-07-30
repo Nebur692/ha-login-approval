@@ -4,9 +4,9 @@
 <h1>Login attempt history</h1>
 
 <form method="get" action="/admin/audit">
-  <select name="user_id" onchange="this.form.submit()">
-    {% for u in users %}
-    <option value="{{ u.id }}" {% if u.id == selected_id %}selected{% endif %}>{{ u.display_name }}</option>
+  <select name="account_id" onchange="this.form.submit()">
+    {% for a in accounts %}
+    <option value="{{ a.email }}" {% if a.email == selected_id %}selected{% endif %}>{{ a.email }}</option>
     {% endfor %}
   </select>
 </form>

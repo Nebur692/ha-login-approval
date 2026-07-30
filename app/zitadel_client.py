@@ -1,6 +1,13 @@
 """ZITADEL client: OAuth2 client_credentials token caching, user listing,
 and per-user metadata read/write (where the HA device mapping lives).
 
+Used only by the legacy Actions V2 webhook (routers/webhook.py, v1.0.0) and
+its admin page (routers/admin/devices.py) — both inherently ZITADEL-
+specific, since Actions V2 has no equivalent in Keycloak/Authentik/etc. The
+passwordless OIDC provider (routers/idp.py, v2.0.0) never imports this
+module; it resolves accounts through its own directory (accounts.py)
+instead, so it works identically regardless of which RP is in front of it.
+
 Verified live against a real instance before writing this (not guessed):
 - POST /management/v1/users/{id}/metadata/{key} with {"value": "<base64>"}
 - GET  /management/v1/users/{id}/metadata/{key} -> {"metadata": {"value": "<base64>", ...}}
@@ -97,36 +104,6 @@ async def list_users() -> list[dict]:
     return users
 
 
-async def get_user_linked_idp_ids(user_id: str) -> list[str]:
-    """Returns the ZITADEL-assigned IDs of every external IDP this user has
-    linked their account to (empty if none). Verified live against a real
-    instance: `result` is entirely absent from the response when empty,
-    not an empty list — same shape as list_users()'s `_search`, and same
-    eventual-consistency caveat (a link created moments ago may not show up
-    immediately in this projection)."""
-    resp = await _require_client().post(
-        f"/management/v1/users/{user_id}/idps/_search",
-        headers=await _auth_headers(),
-        json={},
-    )
-    resp.raise_for_status()
-    return [link["idpId"] for link in resp.json().get("result", [])]
-
-
-async def find_user_by_login(login: str) -> dict | None:
-    """Resolves a human user by email or username (case-insensitive) — used
-    by the passwordless IDP flow to identify the account from the email the
-    visitor types on the bridge page. Fetches the full user list and
-    matches client-side rather than relying on a specific ZITADEL search
-    query filter shape, since this org is small and it keeps this function
-    independent of any unverified filter syntax."""
-    login = login.strip().lower()
-    for user in await list_users():
-        if user["is_machine"]:
-            continue
-        if user["username"].lower() == login or user["email"].lower() == login:
-            return user
-    return None
 
 
 async def get_user_ha_targets(user_id: str) -> list[str]:

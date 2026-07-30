@@ -1,14 +1,11 @@
 {% extends "admin/base.html" %}
-{% block title %}Devices{% endblock %}
+{% block title %}Devices (legacy){% endblock %}
 {% block content %}
-<h1>Approval devices per account</h1>
+<h1>Approval devices per ZITADEL account (legacy webhook)</h1>
 <p class="muted">Which Home Assistant Companion App devices receive the approve/reject notification
-   for each account. An account with no device checked never gets asked for approval.</p>
+   sent before ZITADEL checks the password. This is the v1.0.0 mechanism — unrelated to the
+   <a href="/admin/accounts">passwordless Accounts</a> used by the newer, RP-agnostic flow.</p>
 
-{% if not idp_configured %}
-  <p class="empty">ZITADEL_IDP_RESOURCE_ID isn't configured — the "Linked to HA" column can't be
-     checked and will always show "no".</p>
-{% endif %}
 {% if not mobile_targets %}
   <p class="empty">No notify.mobile_app_* device found in Home Assistant.</p>
 {% endif %}
@@ -16,7 +13,7 @@
 {% for row in rows %}
 <div class="card">
   <h2>{{ row.display_name }} <span class="muted">({{ row.username }})</span></h2>
-  <p class="muted">Linked to HA: {% if row.linked %}yes{% else %}no{% endif %}</p>
+  <p class="muted">Has a passwordless account too: {% if row.has_passwordless_account %}yes{% else %}no{% endif %}</p>
   <form method="post" action="/admin/devices/save">
     <input type="hidden" name="user_id" value="{{ row.id }}">
     {% for target in mobile_targets %}

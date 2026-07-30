@@ -9,11 +9,16 @@ class Settings(BaseSettings):
     ha_base_url: str
     ha_token: str
 
-    # ZITADEL
-    zitadel_base_url: str
-    zitadel_client_id: str
-    zitadel_client_secret: str
-    zitadel_target_signing_key: str
+    # ZITADEL — only needed for the legacy Actions V2 webhook
+    # (routers/webhook.py), which is inherently ZITADEL-specific and
+    # entirely optional. Left unconfigured, that webhook and its
+    # ZITADEL-specific admin page (devices.py) are simply not registered —
+    # the passwordless OIDC provider (routers/idp.py) doesn't need any of
+    # this to work with ZITADEL, Keycloak, Authentik, or any other RP.
+    zitadel_base_url: str = ""
+    zitadel_client_id: str = ""
+    zitadel_client_secret: str = ""
+    zitadel_target_signing_key: str = ""
     """Signing key ZITADEL returned when the webhook Target was created —
     used to verify the `zitadel-signature` header on incoming requests."""
 
@@ -70,10 +75,6 @@ class Settings(BaseSettings):
     geoip_db_dir: str = "/data/geoip"
 
     # v2.0.0 admin panel additions
-    zitadel_idp_resource_id: str = ""
-    """The ID ZITADEL assigned to this service's External IDP registration
-    (Console -> Identity Providers) — lets the admin panel show "Linked to
-    HA: yes/no" per account. Left empty, that column just always shows no."""
     branding_asset_dir: str = "/data/branding"
     """Where uploaded logo/background/favicon files are stored — only
     their path lives in the bridge_branding table, keeping the SQLite file

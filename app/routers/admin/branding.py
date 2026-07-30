@@ -13,14 +13,14 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from app.config import settings
 from app.db import get_db
 from app.routers.admin._auth import require_admin
 
+from app.routers.admin._templates import templates
+
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
 
 
 async def _get_branding(db) -> dict | None:

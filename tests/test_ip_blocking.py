@@ -66,7 +66,7 @@ async def test_list_blocked_only_shows_currently_blocked(temp_db):
 
     blocked = await ip_blocking.list_blocked(temp_db)
     assert len(blocked) == 1
-    assert blocked[0]["zitadel_user_id"] == "user-a"
+    assert blocked[0]["account_id"] == "user-a"
 
     await ip_blocking.unblock(temp_db, "user-a", IP, unblocked_by="admin")
     assert await ip_blocking.list_blocked(temp_db) == []
