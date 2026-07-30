@@ -48,5 +48,13 @@ class Settings(BaseSettings):
     """How long a pending /authorize request stays valid waiting for the
     email + approval steps on the bridge page."""
 
+    # v2.0.0 anti-abuse
+    ip_block_threshold: int = 3
+    """Consecutive failures (explicit rejects + wrong recovery codes, same
+    account + same IP) before blocking — not a time-window rate limit."""
+    recovery_code_batch_size: int = 10
+    recovery_code_low_warning: int = 3
+    """Warn when this many or fewer unused codes remain."""
+
 
 settings = Settings()
