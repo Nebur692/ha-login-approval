@@ -8,3 +8,4 @@ python-multipart==0.0.12
 aiosqlite==0.20.0
 pyjwt[crypto]==2.9.0
 argon2-cffi==23.1.0
+geoip2==4.8.0

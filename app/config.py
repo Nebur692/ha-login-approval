@@ -56,5 +56,13 @@ class Settings(BaseSettings):
     recovery_code_low_warning: int = 3
     """Warn when this many or fewer unused codes remain."""
 
+    # v2.0.0 GeoIP enrichment (self-hosted MaxMind GeoLite2, optional)
+    geoip_account_id: str = ""
+    geoip_license_key: str = ""
+    """Free MaxMind account required — see README. Left empty, GeoIP
+    enrichment is simply skipped (city/country/ISP fields stay empty in
+    the audit log), it's not required for the login flow to work."""
+    geoip_db_dir: str = "/data/geoip"
+
 
 settings = Settings()
