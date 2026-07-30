@@ -9,10 +9,20 @@ services:
     environment:
       - HA_BASE_URL=http://homeassistant.local:8123
       - HA_TOKEN=your_long_lived_ha_token_here
-      - ZITADEL_BASE_URL=https://sso.example.com
-      - ZITADEL_CLIENT_ID=your_zitadel_machine_client_id
-      - ZITADEL_CLIENT_SECRET=your_zitadel_machine_client_secret
-      - ZITADEL_TARGET_SIGNING_KEY=the_signing_key_zitadel_gave_you
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=changeme
+      # Passwordless OIDC provider — required for the v2.0.0 login flow
+      # (works with ZITADEL, Keycloak, Authentik, or any generic OIDC RP)
+      - IDP_ISSUER_URL=http://this-host-ip:8000
+      - IDP_CLIENT_ID=ha-login-approval
+      - IDP_CLIENT_SECRET=change_this_to_a_long_random_value
+      - IDP_CLIENT_REDIRECT_URI=https://your-idp.example.com/idps/callback
+      # Legacy v1.0.0 ZITADEL Actions V2 webhook — optional, leave unset to disable
+      # - ZITADEL_BASE_URL=https://sso.example.com
+      # - ZITADEL_CLIENT_ID=your_zitadel_machine_client_id
+      # - ZITADEL_CLIENT_SECRET=your_zitadel_machine_client_secret
+      # - ZITADEL_TARGET_SIGNING_KEY=the_signing_key_zitadel_gave_you
       - APPROVAL_TIMEOUT_SECONDS=120
+      # Optional GeoIP enrichment (self-hosted MaxMind GeoLite2) — leave unset to skip
+      # - GEOIP_ACCOUNT_ID=your_maxmind_account_id
+      # - GEOIP_LICENSE_KEY=your_maxmind_license_key

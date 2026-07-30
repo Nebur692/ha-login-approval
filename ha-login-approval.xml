@@ -9,13 +9,13 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/Nebur692/ha-login-approval/issues</Support>
   <Project>https://github.com/Nebur692/ha-login-approval</Project>
-  <Overview>Puente entre ZITADEL y Home Assistant: cuando alguien inicia sesión en cualquier servicio conectado a ZITADEL (Zabbix, WordPress, etc.), este servicio manda una notificación con botones Aprobar/Rechazar a los dispositivos de Home Assistant asignados a esa cuenta, y el login solo se completa si se pulsa Aprobar.&#13;
+  <Overview>Aprueba o rechaza inicios de sesión desde una notificación push de Home Assistant. v2.0.0: login realmente SIN CONTRASEÑA, actuando como un Proveedor OIDC genérico compatible con ZITADEL, Keycloak, Authentik o cualquier IDP estándar. Incluye códigos de recuperación de un solo uso, bloqueo de IP tras 3 fallos, enriquecimiento GeoIP opcional y un panel de administración ampliado.&#13;
 &#13;
-Requiere: 1) un Target de Actions V2 ya creado en ZITADEL (tipo REST Webhook, payload JSON, interruptOnError=true) apuntando a http://IP-DE-ESTE-CONTENEDOR:8000/webhook/create-session, con una Execution sobre el método /zitadel.session.v2.SessionService/CreateSession — la clave de firma que ZITADEL devuelve al crear ese Target es el valor de ZITADEL_TARGET_SIGNING_KEY de abajo. 2) un usuario máquina en ZITADEL con permisos de gestión (rol IAM_OWNER) para leer/escribir metadatos de usuario y listar usuarios — sus credenciales van en ZITADEL_CLIENT_ID/ZITADEL_CLIENT_SECRET.&#13;
+También incluye, de forma opcional, el mecanismo original de v1.0.0: un webhook de Actions V2 específico de ZITADEL que aprueba/rechaza ANTES de la contraseña (no la sustituye) — solo se activa si rellenas las variables ZITADEL_* de abajo.&#13;
 &#13;
-Guía completa paso a paso (incluida la parte lioso de la Consola de ZITADEL): https://github.com/Nebur692/ha-login-approval&#13;
+Guía completa paso a paso (registrar el IDP en ZITADEL, Keycloak/Authentik, panel de administración, todas las variables): https://github.com/Nebur692/ha-login-approval&#13;
 &#13;
-Panel de administración (elegir qué dispositivos reciben la notificación por cada cuenta): http://IP:8000/admin</Overview>
+Panel de administración: http://IP:8000/admin</Overview>
   <Category>Security:</Category>
   <WebUI>http://[IP]:[PORT:8000]/admin</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Nebur692/ha-login-approval/main/ha-login-approval.xml</TemplateURL>
@@ -24,29 +24,47 @@ Panel de administración (elegir qué dispositivos reciben la notificación por 
   <PostArgs/>
   <DonateText>Support this project</DonateText>
   <DonateLink>https://ko-fi.com/nebur69265723</DonateLink>
-  <Requires>Home Assistant (con la app Companion instalada en al menos un dispositivo) y ZITADEL ya desplegados y accesibles desde este contenedor.</Requires>
+  <Requires>Home Assistant (con la app Companion instalada en al menos un dispositivo). Para el login sin contraseña: un IDP compatible con OIDC (ZITADEL, Keycloak, Authentik...) donde registrar este servicio como proveedor externo genérico. Para el webhook legado opcional: ZITADEL con Actions V2.</Requires>
 
   <Config Name="HA Base URL" Target="HA_BASE_URL" Default="" Mode="" Description="REQUERIDO. URL interna de tu Home Assistant, sin barra final. Ejemplo: http://192.168.100.16:8123" Type="Variable" Display="always" Required="true" Mask="false"></Config>
 
   <Config Name="HA Token" Target="HA_TOKEN" Default="" Mode="" Description="REQUERIDO. Token de acceso de larga duración de Home Assistant (Perfil de usuario -&gt; Seguridad -&gt; Tokens de acceso de larga duración). Necesita permiso para llamar servicios notify.* y para leer el WebSocket de eventos." Type="Variable" Display="always" Required="true" Mask="true"></Config>
 
-  <Config Name="ZITADEL Base URL" Target="ZITADEL_BASE_URL" Default="" Mode="" Description="REQUERIDO. La URL pública de tu ZITADEL (tu External Domain, con https://). Ejemplo: https://sso.example.com" Type="Variable" Display="always" Required="true" Mask="false"></Config>
-
-  <Config Name="ZITADEL Client ID" Target="ZITADEL_CLIENT_ID" Default="" Mode="" Description="REQUERIDO. Client ID de un usuario máquina de ZITADEL con rol IAM_OWNER (o al menos permiso para leer/escribir metadatos de usuario y listar usuarios). Se crea en Users -&gt; New -&gt; Machine, con client_credentials como método de autenticación." Type="Variable" Display="always" Required="true" Mask="false"></Config>
-
-  <Config Name="ZITADEL Client Secret" Target="ZITADEL_CLIENT_SECRET" Default="" Mode="" Description="REQUERIDO. Client Secret del mismo usuario máquina de arriba." Type="Variable" Display="always" Required="true" Mask="true"></Config>
-
-  <Config Name="ZITADEL Target Signing Key" Target="ZITADEL_TARGET_SIGNING_KEY" Default="" Mode="" Description="REQUERIDO. La clave de firma que ZITADEL devuelve UNA SOLA VEZ al crear el Target de Actions V2 (POST /v2/actions/targets) que apunta a este contenedor — guárdala en ese momento, no se puede recuperar después. Se usa para verificar que las llamadas al webhook vienen de verdad de tu ZITADEL." Type="Variable" Display="always" Required="true" Mask="true"></Config>
-
-  <Config Name="Admin Username" Target="ADMIN_USERNAME" Default="admin" Mode="" Description="Usuario para entrar al panel de administración (selección de dispositivos por cuenta). Autenticación HTTP Basic simple." Type="Variable" Display="always" Required="false" Mask="false">admin</Config>
+  <Config Name="Admin Username" Target="ADMIN_USERNAME" Default="admin" Mode="" Description="Usuario para entrar al panel de administración. Autenticación HTTP Basic simple." Type="Variable" Display="always" Required="false" Mask="false">admin</Config>
 
   <Config Name="Admin Password" Target="ADMIN_PASSWORD" Default="" Mode="" Description="REQUERIDO. Contraseña para el panel de administración." Type="Variable" Display="always" Required="true" Mask="true"></Config>
 
-  <Config Name="Approval Timeout Seconds" Target="APPROVAL_TIMEOUT_SECONDS" Default="120" Mode="" Description="Cuántos segundos se espera la respuesta (aprobar/rechazar) antes de cortar el login por timeout. Debe quedarse claramente por debajo del límite máximo de un Target de Actions V2 en ZITADEL (270s), para dejar margen a la propia llamada." Type="Variable" Display="advanced" Required="false" Mask="false">120</Config>
+  <Config Name="Puerto Web/API" Target="8000" Default="8000" Mode="tcp" Description="Puerto interno. Úsalo para el panel /admin y como base de las URLs del Proveedor OIDC (IDP Issuer URL) y del webhook legado." Type="Port" Display="always" Required="true" Mask="false">8000</Config>
 
-  <Config Name="Metadata Key" Target="METADATA_KEY" Default="ha_notify_targets" Mode="" Description="No tocar salvo que sepas por qué. Nombre de la clave de metadato de usuario en ZITADEL donde se guarda la lista de dispositivos asignados a cada cuenta." Type="Variable" Display="advanced" Required="false" Mask="false">ha_notify_targets</Config>
+  <Config Name="Datos persistentes" Target="/data" Default="/mnt/user/appdata/ha-login-approval" Mode="rw" Description="Carpeta persistente para la base de datos SQLite propia del servicio (cuentas del flujo sin contraseña, códigos de recuperación, auditoría, bloqueo de IP, personalización) y para los ficheros .mmdb de GeoIP. Sin este volumen se pierde todo al recrear el contenedor." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/ha-login-approval</Config>
 
-  <Config Name="Puerto Web/API" Target="8000" Default="8000" Mode="tcp" Description="Puerto interno. El Target de ZITADEL debe apuntar a http://IP-de-este-contenedor:PUERTO/webhook/create-session — no lo expongas directamente a internet, solo debe ser alcanzable desde tu propio ZITADEL." Type="Port" Display="always" Required="true" Mask="false">8000</Config>
+  <Config Name="IDP Issuer URL" Target="IDP_ISSUER_URL" Default="" Mode="" Description="REQUERIDO para el login sin contraseña. La URL con la que tu IDP (ZITADEL/Keycloak/Authentik) alcanza este contenedor, sin barra final. Ejemplo: http://192.168.1.50:8000 — usada como emisor (iss) y para construir las URLs de /authorize, /token y /jwks.json." Type="Variable" Display="always" Required="true" Mask="false"></Config>
 
-  <Config Name="Datos persistentes" Target="/data" Default="/mnt/user/appdata/ha-login-approval" Mode="rw" Description="Carpeta persistente para la base de datos SQLite propia del servicio (códigos de recuperación de un solo uso, auditoría de logins, bloqueo de IP, personalización de la página de login) y para los ficheros .mmdb de GeoIP. Sin este volumen se pierde todo al recrear el contenedor." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/ha-login-approval</Config>
+  <Config Name="IDP Client ID" Target="IDP_CLIENT_ID" Default="" Mode="" Description="REQUERIDO para el login sin contraseña. Identificador que tu IDP usará para autenticarse contra el /token de este servicio — invéntatelo tú (ej. ha-login-approval), es el mismo valor que pondrás al registrar el IDP externo genérico en tu ZITADEL/Keycloak/Authentik." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+
+  <Config Name="IDP Client Secret" Target="IDP_CLIENT_SECRET" Default="" Mode="" Description="REQUERIDO para el login sin contraseña. Contraseña que acompaña al Client ID de arriba — genera una aleatoria larga tú mismo, es el mismo valor que pondrás al registrar el IDP externo en tu ZITADEL/Keycloak/Authentik." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+
+  <Config Name="IDP Client Redirect URI" Target="IDP_CLIENT_REDIRECT_URI" Default="" Mode="" Description="REQUERIDO para el login sin contraseña. La URL de retorno exacta que tu IDP usa tras el login (para ZITADEL suele ser https://tu-dominio-zitadel/idps/callback) — se valida en cada intento para evitar redirecciones no autorizadas." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+
+  <Config Name="ZITADEL Base URL (webhook legado, opcional)" Target="ZITADEL_BASE_URL" Default="" Mode="" Description="OPCIONAL. Solo si quieres además el webhook legado de v1.0.0 (aprobar/rechazar ANTES de la contraseña, específico de ZITADEL Actions V2). La URL pública de tu ZITADEL (External Domain, con https://). Vacío = esa función queda desactivada, sin afectar al login sin contraseña." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <Config Name="ZITADEL Client ID (webhook legado)" Target="ZITADEL_CLIENT_ID" Default="" Mode="" Description="OPCIONAL, solo junto con ZITADEL Base URL. Client ID de un usuario máquina de ZITADEL con rol IAM_OWNER (o permiso para leer/escribir metadatos de usuario y listar usuarios)." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <Config Name="ZITADEL Client Secret (webhook legado)" Target="ZITADEL_CLIENT_SECRET" Default="" Mode="" Description="OPCIONAL, solo junto con ZITADEL Base URL. Client Secret del mismo usuario máquina de arriba." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+
+  <Config Name="ZITADEL Target Signing Key (webhook legado)" Target="ZITADEL_TARGET_SIGNING_KEY" Default="" Mode="" Description="OPCIONAL, solo junto con ZITADEL Base URL. La clave de firma que ZITADEL devuelve al crear el Target de Actions V2 — verifica que las llamadas al webhook vienen de verdad de tu ZITADEL." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+
+  <Config Name="Approval Timeout Seconds" Target="APPROVAL_TIMEOUT_SECONDS" Default="120" Mode="" Description="Cuántos segundos se espera la respuesta (aprobar/rechazar) antes de darla por fallida, en ambos flujos. Si usas el webhook legado, debe quedarse claramente por debajo del límite de 270s de ZITADEL para Targets de Actions V2." Type="Variable" Display="advanced" Required="false" Mask="false">120</Config>
+
+  <Config Name="Retraso de reintento/recuperación (segundos)" Target="BRIDGE_RECOVERY_UNLOCK_DELAY_SECONDS" Default="60" Mode="" Description="Solo login sin contraseña. Segundos sin respuesta antes de que la página ofrezca reintentar o usar un código de recuperación — la aprobación original sigue esperando en paralelo." Type="Variable" Display="advanced" Required="false" Mask="false">60</Config>
+
+  <Config Name="Umbral de bloqueo de IP" Target="IP_BLOCK_THRESHOLD" Default="3" Mode="" Description="Fallos consecutivos (rechazo explícito o código de recuperación incorrecto, misma cuenta + misma IP) antes de bloquear. No es una ventana de tiempo, es un contador de fallos seguidos." Type="Variable" Display="advanced" Required="false" Mask="false">3</Config>
+
+  <Config Name="Tamaño de lote de códigos de recuperación" Target="RECOVERY_CODE_BATCH_SIZE" Default="10" Mode="" Description="Cuántos códigos de recuperación se generan de golpe desde el panel /admin/recovery." Type="Variable" Display="advanced" Required="false" Mask="false">10</Config>
+
+  <Config Name="Aviso de códigos de recuperación bajos" Target="RECOVERY_CODE_LOW_WARNING" Default="3" Mode="" Description="Avisar por notificación push cuando queden este número de códigos de recuperación o menos." Type="Variable" Display="advanced" Required="false" Mask="false">3</Config>
+
+  <Config Name="MaxMind Account ID (GeoIP, opcional)" Target="GEOIP_ACCOUNT_ID" Default="" Mode="" Description="OPCIONAL. Cuenta gratuita de MaxMind (maxmind.com) para descargar GeoLite2-City/ASN y añadir ciudad/país/operador a la auditoría. Vacío = esa parte de la auditoría queda sin rellenar, el login funciona igual." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <Config Name="MaxMind License Key (GeoIP, opcional)" Target="GEOIP_LICENSE_KEY" Default="" Mode="" Description="OPCIONAL, junto con la cuenta de arriba. License key generada en tu cuenta de MaxMind." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
 </Container>
