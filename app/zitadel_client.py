@@ -76,7 +76,7 @@ async def validate_connectivity() -> None:
 
 
 async def list_users() -> list[dict]:
-    """Returns every user in the org: [{id, username, display_name, is_machine}, ...]."""
+    """Returns every user in the org: [{id, username, display_name, email, is_machine}, ...]."""
     resp = await _require_client().post(
         "/management/v1/users/_search",
         headers=await _auth_headers(),
@@ -91,9 +91,26 @@ async def list_users() -> list[dict]:
             "id": u["id"],
             "username": u.get("userName", ""),
             "display_name": display_name or u.get("userName", ""),
+            "email": u.get("human", {}).get("email", {}).get("email", ""),
             "is_machine": is_machine,
         })
     return users
+
+
+async def find_user_by_login(login: str) -> dict | None:
+    """Resolves a human user by email or username (case-insensitive) — used
+    by the passwordless IDP flow to identify the account from the email the
+    visitor types on the bridge page. Fetches the full user list and
+    matches client-side rather than relying on a specific ZITADEL search
+    query filter shape, since this org is small and it keeps this function
+    independent of any unverified filter syntax."""
+    login = login.strip().lower()
+    for user in await list_users():
+        if user["is_machine"]:
+            continue
+        if user["username"].lower() == login or user["email"].lower() == login:
+            return user
+    return None
 
 
 async def get_user_ha_targets(user_id: str) -> list[str]:

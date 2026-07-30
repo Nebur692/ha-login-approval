@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sign in</title>
+  <style>
+    body { font-family: sans-serif; max-width: 400px; margin: 10vh auto; text-align: center; }
+    input { width: 100%; padding: 0.5em; font-size: 1em; box-sizing: border-box; }
+    button { padding: 0.5em 1.5em; font-size: 1em; margin-top: 1em; }
+    #waiting { display: none; }
+  </style>
+</head>
+<body>
+  <div id="email-step">
+    <p>Enter your email to continue.</p>
+    <form id="email-form">
+      <input type="email" id="email" name="email" required autofocus>
+      <button type="submit">Continue</button>
+    </form>
+  </div>
+
+  <div id="waiting">
+    <p>Check your phone and approve the sign-in request…</p>
+  </div>
+
+  <p id="error" style="color: red;"></p>
+
+  <script>
+    const requestId = "{{ request_id }}";
+
+    document.getElementById("email-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("email").value;
+      const resp = await fetch("/idp/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ request_id: requestId, email }),
+      });
+      if (!resp.ok) {
+        document.getElementById("error").innerText = "Something went wrong. Please try again.";
+        return;
+      }
+      document.getElementById("email-step").style.display = "none";
+      document.getElementById("waiting").style.display = "block";
+      poll();
+    });
+
+    async function poll() {
+      const resp = await fetch(`/idp/status/${requestId}`);
+      const data = await resp.json();
+      if (data.status === "approved") {
+        window.location.href = `/idp/complete/${requestId}`;
+      } else if (data.status === "rejected" || data.status === "timeout" || data.status === "denied") {
+        document.getElementById("waiting").style.display = "none";
+        document.getElementById("error").innerText = "Sign-in was not approved.";
+      } else {
+        setTimeout(poll, 2000);
+      }
+    }
+
+    // Forward-compatible: if the RP ever sends login_hint, the server
+    // already started the approval — check status immediately.
+    document.getElementById("email-step").style.display = "block";
+    (async () => {
+      const resp = await fetch(`/idp/status/${requestId}`);
+      const data = await resp.json();
+      if (data.status !== "awaiting_email") {
+        document.getElementById("email-step").style.display = "none";
+        document.getElementById("waiting").style.display = "block";
+        poll();
+      }
+    })();
+  </script>
+</body>
+</html>

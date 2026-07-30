@@ -31,5 +31,22 @@ class Settings(BaseSettings):
     # (ha_notify_targets stays in ZITADEL metadata, unaffected by this)
     sqlite_db_path: str = "/data/ha-login-approval.db"
 
+    # v2.0.0 passwordless OIDC provider — this service acts as a generic
+    # external IDP for ZITADEL (and, per README, any OIDC-capable RP).
+    idp_issuer_url: str = ""
+    """Our own public base URL, e.g. https://ha-login.example.com — used as
+    the `iss` claim and to build the discovery document's endpoint URLs."""
+    idp_client_id: str = ""
+    """Client ID the relying party (e.g. ZITADEL) authenticates with against
+    our /token endpoint. Single static client for v2.0.0 — one RP per
+    deployment, matching this project's single-tenant scope."""
+    idp_client_secret: str = ""
+    idp_client_redirect_uri: str = ""
+    """Exact redirect_uri the RP will use — validated on every /authorize
+    call to prevent an open redirect via a forged redirect_uri."""
+    idp_login_timeout_seconds: int = 300
+    """How long a pending /authorize request stays valid waiting for the
+    email + approval steps on the bridge page."""
+
 
 settings = Settings()
