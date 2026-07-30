@@ -24,6 +24,11 @@ class ApprovalOutcome(str, Enum):
     REJECTED = "rejected"
     TIMEOUT = "timeout"
     NO_TARGETS = "no_targets"
+    SEND_FAILED = "send_failed"
+    """Every target's notification send raised — there's no point waiting
+    for a response nobody was ever notified about (the passwordless bridge
+    page uses this to skip straight to the retry/recovery screen instead
+    of waiting out the full timeout for nothing, see Fase 6)."""
 
 
 @dataclass
@@ -40,6 +45,7 @@ async def run_approval(zitadel_user_id: str, request_id: str, context: LoginCont
     lang = await ha_client.get_ha_language()
     text = build_notification(lang, {"description": context.browser_description, "ip": context.ip})
 
+    send_failures = 0
     for target in targets:
         try:
             await ha_client.send_approval_notification(
@@ -47,6 +53,10 @@ async def run_approval(zitadel_user_id: str, request_id: str, context: LoginCont
             )
         except Exception:
             logger.exception("Failed to send approval notification to %s", target)
+            send_failures += 1
+
+    if send_failures == len(targets):
+        return ApprovalOutcome.SEND_FAILED
 
     approved = await ha_client.wait_for_action(request_id, timeout=settings.approval_timeout_seconds)
     if approved is True:

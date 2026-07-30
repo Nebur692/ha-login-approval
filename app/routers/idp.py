@@ -10,9 +10,14 @@ authenticated via `client_secret_basic` (confirmed live), and ZITADEL always
 calls /userinfo after the token exchange — omitting it makes the whole
 login fail, so it's implemented here even though nothing forces us to.
 
-This is Fase 5's minimal functional bridge page (email field + spinner,
-polling /idp/status). Fase 6 replaces this with the full UX: 60s escalation
-to a retry/recovery-code screen, branding, etc.
+Fase 6 bridge-page UX: email → spinner → at
+bridge_recovery_unlock_delay_seconds (60s) with no answer, or immediately
+on a SEND_FAILED outcome, the page offers retry/recovery-code options —
+without ever stopping the original poll, so a late approval still
+completes normally. The recovery-code form is gated server-side (via
+`_recovery_available`, checked again on submission, not just for display)
+so it's never reachable as a day-one entry point regardless of what the
+client-side JS does or doesn't enforce.
 """
 import asyncio
 import base64
@@ -24,9 +29,10 @@ from fastapi import APIRouter, Form, Header, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import idp_jwt, zitadel_client
+from app import idp_jwt, recovery_codes, zitadel_client
 from app.approval_flow import ApprovalOutcome, LoginContext, run_approval
 from app.config import settings
+from app.db import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -38,6 +44,8 @@ templates = Jinja2Templates(directory="templates")
 _pending: dict[str, dict] = {}
 _auth_codes: dict[str, dict] = {}
 _access_tokens: dict[str, dict] = {}
+
+_TERMINAL_STATUSES = {"approved", "rejected", "timeout", "denied", "send_failed"}
 
 
 def _issuer() -> str:
@@ -104,6 +112,31 @@ async def authorize(
     return templates.TemplateResponse(request, "idp_bridge.html", {"request_id": request_id})
 
 
+_OUTCOME_TO_STATUS = {
+    ApprovalOutcome.APPROVED: "approved",
+    ApprovalOutcome.REJECTED: "rejected",
+    ApprovalOutcome.TIMEOUT: "timeout",
+    # Unlike the legacy webhook (routers/webhook.py), NO_TARGETS must deny
+    # here — there is no password fallback in this flow, so an account with
+    # no HA devices assigned can never complete a passwordless login.
+    ApprovalOutcome.NO_TARGETS: "denied",
+    ApprovalOutcome.SEND_FAILED: "send_failed",
+}
+
+
+async def _run_notify_and_wait(request_id: str) -> None:
+    """(Re)sends the HA notification and waits for a response — shared by
+    the first attempt and by /idp/retry, both of which already know the
+    resolved zitadel_user_id."""
+    pending = _pending[request_id]
+    pending["status"] = "waiting"
+    pending["waiting_since"] = time.time()
+
+    context = LoginContext(ip=pending["ip"], browser_description=pending["user_agent"])
+    outcome = await run_approval(pending["zitadel_user_id"], request_id, context)
+    pending["status"] = _OUTCOME_TO_STATUS[outcome]
+
+
 async def _start_approval(request_id: str, email: str) -> None:
     pending = _pending.get(request_id)
     if pending is None:
@@ -116,20 +149,21 @@ async def _start_approval(request_id: str, email: str) -> None:
 
     pending["email"] = email
     pending["zitadel_user_id"] = user["id"]
-    pending["status"] = "waiting"
+    await _run_notify_and_wait(request_id)
 
-    context = LoginContext(ip=pending["ip"], browser_description=pending["user_agent"])
-    outcome = await run_approval(user["id"], request_id, context)
 
-    # Unlike the legacy webhook (routers/webhook.py), NO_TARGETS must deny
-    # here — there is no password fallback in this flow, so an account with
-    # no HA devices assigned can never complete a passwordless login.
-    pending["status"] = {
-        ApprovalOutcome.APPROVED: "approved",
-        ApprovalOutcome.REJECTED: "rejected",
-        ApprovalOutcome.TIMEOUT: "timeout",
-        ApprovalOutcome.NO_TARGETS: "denied",
-    }[outcome]
+def _recovery_available(pending: dict) -> bool:
+    """Server-side gate for the recovery-code form: never reachable before
+    a real attempt was made to notify the account, and only ever for a
+    request that got as far as resolving a real ZITADEL user."""
+    if pending.get("zitadel_user_id") is None:
+        return False
+    if pending["status"] == "send_failed":
+        return True
+    waiting_since = pending.get("waiting_since")
+    if waiting_since is None:
+        return False
+    return (time.time() - waiting_since) >= settings.bridge_recovery_unlock_delay_seconds
 
 
 @router.post("/idp/email")
@@ -150,7 +184,43 @@ async def status(request_id: str):
     pending = _pending.get(request_id)
     if pending is None:
         raise HTTPException(status_code=404, detail="unknown or expired request")
-    return {"status": pending["status"]}
+    return {"status": pending["status"], "recovery_available": _recovery_available(pending)}
+
+
+@router.post("/idp/retry")
+async def retry(request_id: str = Form(...)):
+    """Resends the notification without re-resolving the email — only
+    available once the recovery/retry screen itself is (see
+    _recovery_available), same server-side gate for both actions."""
+    pending = _pending.get(request_id)
+    if pending is None:
+        raise HTTPException(status_code=404, detail="unknown or expired request")
+    if pending["status"] == "approved":
+        raise HTTPException(status_code=409, detail="already approved")
+    if not _recovery_available(pending):
+        raise HTTPException(status_code=403, detail="retry not available yet")
+
+    asyncio.create_task(_run_notify_and_wait(request_id))
+    return {"status": "waiting"}
+
+
+@router.post("/idp/recovery")
+async def submit_recovery_code(request: Request, request_id: str = Form(...), code: str = Form(...)):
+    pending = _pending.get(request_id)
+    if pending is None:
+        raise HTTPException(status_code=404, detail="unknown or expired request")
+    if pending["status"] == "approved":
+        raise HTTPException(status_code=409, detail="already approved")
+    if not _recovery_available(pending):
+        raise HTTPException(status_code=403, detail="recovery code not available yet")
+
+    ip = request.client.host if request.client else "unknown"
+    valid = await recovery_codes.verify_code(get_db(), pending["zitadel_user_id"], code, used_ip=ip)
+    if not valid:
+        raise HTTPException(status_code=401, detail="invalid recovery code")
+
+    pending["status"] = "approved"
+    return {"status": "approved"}
 
 
 @router.get("/idp/complete/{request_id}")

@@ -41,4 +41,6 @@ async def create_session_hook(
         return {}
     if outcome == ApprovalOutcome.REJECTED:
         raise HTTPException(status_code=403, detail="Login rejected from Home Assistant")
+    if outcome == ApprovalOutcome.SEND_FAILED:
+        raise HTTPException(status_code=403, detail="Could not reach Home Assistant to request approval")
     raise HTTPException(status_code=403, detail="Login approval timed out")

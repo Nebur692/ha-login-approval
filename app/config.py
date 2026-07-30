@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     idp_login_timeout_seconds: int = 300
     """How long a pending /authorize request stays valid waiting for the
     email + approval steps on the bridge page."""
+    bridge_recovery_unlock_delay_seconds: int = 60
+    """How long the bridge page waits with no response before offering
+    retry/recovery-code options — independent of approval_timeout_seconds
+    (the backend keeps waiting for the real HA response up to that longer
+    timeout regardless of whether this UI escalation has kicked in)."""
 
     # v2.0.0 anti-abuse
     ip_block_threshold: int = 3
