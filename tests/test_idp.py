@@ -235,7 +235,8 @@ async def test_recovery_code_completes_login_after_timeout(client, idp_ready, mo
     assert status_resp.json()["status"] == "timeout"
     assert status_resp.json()["recovery_available"] is True
 
-    with patch("app.routers.idp.recovery_codes.verify_code", AsyncMock(return_value=True)):
+    with patch("app.routers.idp.recovery_codes.verify_code", AsyncMock(return_value=True)), \
+         patch("app.routers.idp.ha_client.call_service", AsyncMock()):
         recovery_resp = await client.post("/idp/recovery", data={"request_id": request_id, "code": "AAAA-AAAA-AAAA"})
     assert recovery_resp.status_code == 200
 
@@ -291,3 +292,153 @@ async def test_retry_rejected_once_already_approved(client, idp_ready, monkeypat
 
     resp = await client.post("/idp/retry", data={"request_id": request_id})
     assert resp.status_code == 409
+
+
+# --- Fase 8: anti-abuse wiring --------------------------------------------
+
+async def test_blocked_ip_denies_without_notifying(client, idp_ready):
+    from app import ip_blocking
+
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    for _ in range(3):
+        await ip_blocking.record_failure(db.get_db(), EMAIL, "127.0.0.1")
+    assert await ip_blocking.is_blocked(db.get_db(), EMAIL, "127.0.0.1") is True
+
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    run_approval_mock = AsyncMock(return_value=ApprovalOutcome.APPROVED)
+    with patch("app.routers.idp.run_approval", run_approval_mock):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    run_approval_mock.assert_not_called()
+    status_resp = await client.get(f"/idp/status/{request_id}")
+    assert status_resp.json()["status"] == "denied"
+
+
+async def test_explicit_reject_records_ip_failure_and_audit(client, idp_ready):
+    from app import audit, ip_blocking
+
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.REJECTED)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    row = await ip_blocking._get_state(db.get_db(), EMAIL, "127.0.0.1")
+    assert row["consecutive_failures"] == 1
+
+    events = await audit.list_events(db.get_db(), EMAIL)
+    assert events[0]["event_type"] == "rejected"
+
+
+async def test_timeout_does_not_record_ip_failure(client, idp_ready):
+    from app import ip_blocking
+
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    row = await ip_blocking._get_state(db.get_db(), EMAIL, "127.0.0.1")
+    assert row is None
+
+
+async def test_approved_resets_ip_failure_counter(client, idp_ready):
+    from app import ip_blocking
+
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await ip_blocking.record_failure(db.get_db(), EMAIL, "127.0.0.1")
+    await ip_blocking.record_failure(db.get_db(), EMAIL, "127.0.0.1")
+
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    row = await ip_blocking._get_state(db.get_db(), EMAIL, "127.0.0.1")
+    assert row["consecutive_failures"] == 0
+
+
+async def test_wrong_recovery_code_records_ip_failure(client, idp_ready, monkeypatch):
+    from app import ip_blocking
+
+    monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 0)
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    with patch("app.routers.idp.recovery_codes.verify_code", AsyncMock(return_value=False)):
+        await client.post("/idp/recovery", data={"request_id": request_id, "code": "WRONG-CODE-HERE"})
+
+    row = await ip_blocking._get_state(db.get_db(), EMAIL, "127.0.0.1")
+    assert row["consecutive_failures"] == 1
+
+
+async def test_correct_recovery_code_logs_audit_and_resets_counter(client, idp_ready, monkeypatch):
+    from app import audit, ip_blocking
+
+    monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 0)
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await ip_blocking.record_failure(db.get_db(), EMAIL, "127.0.0.1")
+
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    with patch("app.routers.idp.recovery_codes.verify_code", AsyncMock(return_value=True)), \
+         patch("app.routers.idp.ha_client.call_service", AsyncMock()):
+        resp = await client.post("/idp/recovery", data={"request_id": request_id, "code": "AAAA-AAAA-AAAA"})
+    assert resp.status_code == 200
+
+    row = await ip_blocking._get_state(db.get_db(), EMAIL, "127.0.0.1")
+    assert row["consecutive_failures"] == 0
+
+    events = await audit.list_events(db.get_db(), EMAIL)
+    assert events[0]["event_type"] == "recovery_code_used"
+
+
+async def test_low_recovery_codes_triggers_warning_notification(client, idp_ready, monkeypatch):
+    from app import recovery_codes
+
+    monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 0)
+    monkeypatch.setattr(settings, "recovery_code_low_warning", 3)
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    codes = await recovery_codes.generate_batch(db.get_db(), EMAIL, generated_by="admin", count=3)
+    # Use 2 of 3 up front so only 1 remains after the one used via the flow below.
+    await recovery_codes.verify_code(db.get_db(), EMAIL, codes[0], used_ip="1.2.3.4")
+    await recovery_codes.verify_code(db.get_db(), EMAIL, codes[1], used_ip="1.2.3.4")
+
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    call_mock = AsyncMock()
+    with patch("app.routers.idp.ha_client.call_service", call_mock):
+        await client.post("/idp/recovery", data={"request_id": request_id, "code": codes[2]})
+
+    call_mock.assert_called_once()
+    args = call_mock.call_args.args
+    assert args[0] == "notify"
+    assert args[1] == "mobile_app_x"
+    assert "0" in args[2]["message"] or "exhausted" in args[2]["title"].lower()
+
+

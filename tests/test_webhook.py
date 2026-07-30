@@ -4,7 +4,21 @@ import json
 import time
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
+from app import db
+from app.config import settings
+
 SIGNING_KEY = "test-signing-key"
+
+
+@pytest.fixture(autouse=True)
+async def webhook_db(tmp_path, monkeypatch):
+    """webhook.py now checks ip_blocking state, which needs a real DB."""
+    monkeypatch.setattr(settings, "sqlite_db_path", str(tmp_path / "webhook.db"))
+    await db.init_db()
+    yield
+    await db.close_db()
 
 
 def _signed_request(body_dict: dict) -> tuple[bytes, dict]:
@@ -106,3 +120,52 @@ async def test_notification_send_failure_does_not_crash_the_hook(client):
          patch("app.approval_flow.ha_client.wait_for_action", AsyncMock(return_value=None)):
         resp = await client.post("/webhook/create-session", content=body, headers=headers)
     assert resp.status_code == 403
+
+
+async def test_explicit_reject_counts_toward_ip_block_threshold(client):
+    """Decided explicitly with the user: an explicit reject on the legacy
+    webhook counts toward the same block threshold as the passwordless
+    flow, even though the rest of this flow is otherwise unchanged."""
+    body, headers = _signed_request(_payload("u1"))
+    with patch("app.routers.webhook.zitadel_client.get_user_ha_targets", AsyncMock(return_value=["mobile_app_x"])), \
+         patch("app.approval_flow.ha_client.get_ha_language", AsyncMock(return_value="en")), \
+         patch("app.approval_flow.ha_client.send_approval_notification", AsyncMock()), \
+         patch("app.approval_flow.ha_client.wait_for_action", AsyncMock(return_value=False)):
+        for _ in range(3):
+            resp = await client.post("/webhook/create-session", content=body, headers=headers)
+            assert resp.status_code == 403
+
+    from app import ip_blocking
+    assert await ip_blocking.is_blocked(db.get_db(), "u1", "203.0.113.5") is True
+
+
+async def test_already_blocked_ip_rejected_without_notifying(client):
+    from app import ip_blocking
+
+    for _ in range(3):
+        await ip_blocking.record_failure(db.get_db(), "u1", "203.0.113.5")
+    assert await ip_blocking.is_blocked(db.get_db(), "u1", "203.0.113.5") is True
+
+    body, headers = _signed_request(_payload("u1"))
+    send_mock = AsyncMock()
+    with patch("app.routers.webhook.zitadel_client.get_user_ha_targets", AsyncMock(return_value=["mobile_app_x"])), \
+         patch("app.approval_flow.ha_client.send_approval_notification", send_mock):
+        resp = await client.post("/webhook/create-session", content=body, headers=headers)
+    assert resp.status_code == 403
+    send_mock.assert_not_called()
+
+
+async def test_timeout_does_not_count_toward_ip_block(client):
+    """A silent timeout is not the same signal as an explicit reject —
+    shouldn't move the failure counter at all, even repeated."""
+    body, headers = _signed_request(_payload("u1"))
+    with patch("app.routers.webhook.zitadel_client.get_user_ha_targets", AsyncMock(return_value=["mobile_app_x"])), \
+         patch("app.approval_flow.ha_client.get_ha_language", AsyncMock(return_value="en")), \
+         patch("app.approval_flow.ha_client.send_approval_notification", AsyncMock()), \
+         patch("app.approval_flow.ha_client.wait_for_action", AsyncMock(return_value=None)):
+        for _ in range(3):
+            resp = await client.post("/webhook/create-session", content=body, headers=headers)
+            assert resp.status_code == 403
+
+    from app import ip_blocking
+    assert await ip_blocking.is_blocked(db.get_db(), "u1", "203.0.113.5") is False

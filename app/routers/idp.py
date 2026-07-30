@@ -36,7 +36,7 @@ from fastapi import APIRouter, Form, Header, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import accounts, idp_jwt, recovery_codes
+from app import accounts, audit, geoip, ha_client, idp_jwt, ip_blocking, recovery_codes
 from app.approval_flow import ApprovalOutcome, LoginContext, run_approval
 from app.config import settings
 from app.db import get_db
@@ -127,17 +127,62 @@ _OUTCOME_TO_STATUS = {
 }
 
 
+async def _log_audit(account_id: str, request_id: str, event_type: str, ip: str, user_agent: str) -> None:
+    geo = geoip.lookup(ip)
+    await audit.log_event(
+        get_db(), account_id, request_id, event_type,
+        ip=ip, user_agent=user_agent,
+        geo_city=geo.city, geo_country=geo.country, geo_asn_org=geo.asn_org,
+    )
+
+
+async def _maybe_warn_low_recovery_codes(account_id: str, targets: list[str]) -> None:
+    remaining = await recovery_codes.remaining_count(get_db(), account_id)
+    if remaining == 0:
+        title = "Recovery codes exhausted"
+        body = ("You've just used your last one-time recovery code for this account — "
+                "generate a new batch from the admin panel as soon as possible.")
+    elif remaining <= settings.recovery_code_low_warning:
+        title = "Recovery codes running low"
+        body = f"Only {remaining} recovery code(s) left for this account."
+    else:
+        return
+
+    for target in targets:
+        try:
+            await ha_client.call_service("notify", target, {"title": title, "message": body})
+        except Exception:
+            logger.exception("Failed to send low-recovery-codes warning to %s", target)
+
+
 async def _run_notify_and_wait(request_id: str, targets: list[str]) -> None:
     """(Re)sends the HA notification and waits for a response — shared by
     the first attempt and by /idp/retry, both of which already know the
     resolved account_id and its assigned targets."""
     pending = _pending[request_id]
+    db = get_db()
+    account_id = pending["account_id"]
+
+    if await ip_blocking.is_blocked(db, account_id, pending["ip"]):
+        pending["status"] = "denied"
+        await _log_audit(account_id, request_id, "blocked", pending["ip"], pending["user_agent"])
+        return
+
     pending["status"] = "waiting"
     pending["waiting_since"] = time.time()
 
     context = LoginContext(ip=pending["ip"], browser_description=pending["user_agent"])
     outcome = await run_approval(targets, request_id, context)
     pending["status"] = _OUTCOME_TO_STATUS[outcome]
+
+    if outcome == ApprovalOutcome.APPROVED:
+        await ip_blocking.record_success(db, account_id, pending["ip"])
+    elif outcome == ApprovalOutcome.REJECTED:
+        # Explicit reject is a strong abuse signal — counts toward the
+        # block threshold, unlike a silent timeout.
+        await ip_blocking.record_failure(db, account_id, pending["ip"])
+
+    await _log_audit(account_id, request_id, pending["status"], pending["ip"], pending["user_agent"])
 
 
 async def _start_approval(request_id: str, email: str) -> None:
@@ -223,10 +268,25 @@ async def submit_recovery_code(request: Request, request_id: str = Form(...), co
     if not _recovery_available(pending):
         raise HTTPException(status_code=403, detail="recovery code not available yet")
 
+    db = get_db()
     ip = request.client.host if request.client else "unknown"
-    valid = await recovery_codes.verify_code(get_db(), pending["account_id"], code, used_ip=ip)
-    if not valid:
+    account_id = pending["account_id"]
+
+    if await ip_blocking.is_blocked(db, account_id, ip):
+        # Generic failure — never reveal to the browser that this is a
+        # block rather than simply a wrong code.
         raise HTTPException(status_code=401, detail="invalid recovery code")
+
+    valid = await recovery_codes.verify_code(db, account_id, code, used_ip=ip)
+    if not valid:
+        await ip_blocking.record_failure(db, account_id, ip)
+        raise HTTPException(status_code=401, detail="invalid recovery code")
+
+    await ip_blocking.record_success(db, account_id, ip)
+    await _log_audit(account_id, request_id, "recovery_code_used", ip, pending["user_agent"])
+
+    targets = await accounts.get_targets(db, pending["email"])
+    await _maybe_warn_low_recovery_codes(account_id, targets)
 
     pending["status"] = "approved"
     return {"status": "approved"}

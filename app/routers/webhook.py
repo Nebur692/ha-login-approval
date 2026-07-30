@@ -4,9 +4,10 @@ after password/IdP verification succeeds, before the user is actually
 logged in. Returning a non-2xx status here aborts the login."""
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from app import ha_client, zitadel_client
+from app import ha_client, ip_blocking, zitadel_client
 from app.approval_flow import ApprovalOutcome, LoginContext, run_approval
 from app.config import settings
+from app.db import get_db
 from app.zitadel_signature import verify as verify_signature
 
 router = APIRouter()
@@ -38,15 +39,26 @@ async def create_session_hook(
         # doesn't skip authentication, unlike the passwordless IDP flow.
         return {}
 
-    request_id = ha_client.new_request_id()
     user_agent = payload.get("request", {}).get("userAgent", {})
-    context = LoginContext(ip=user_agent.get("ip", "unknown"), browser_description=user_agent.get("description", ""))
+    ip = user_agent.get("ip", "unknown")
+
+    db = get_db()
+    if await ip_blocking.is_blocked(db, user_id, ip):
+        raise HTTPException(status_code=403, detail="Login rejected from Home Assistant")
+
+    request_id = ha_client.new_request_id()
+    context = LoginContext(ip=ip, browser_description=user_agent.get("description", ""))
 
     outcome = await run_approval(targets, request_id, context)
 
     if outcome == ApprovalOutcome.APPROVED:
+        await ip_blocking.record_success(db, user_id, ip)
         return {}
     if outcome == ApprovalOutcome.REJECTED:
+        # Explicit reject counts toward the same block threshold as the
+        # passwordless flow — a real rejection is a strong abuse signal
+        # regardless of which flow it came through.
+        await ip_blocking.record_failure(db, user_id, ip)
         raise HTTPException(status_code=403, detail="Login rejected from Home Assistant")
     if outcome == ApprovalOutcome.SEND_FAILED:
         raise HTTPException(status_code=403, detail="Could not reach Home Assistant to request approval")
