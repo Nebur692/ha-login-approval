@@ -4,6 +4,8 @@ services:
     restart: unless-stopped
     ports:
       - 8000:8000
+    volumes:
+      - ./data:/data
     environment:
       - HA_BASE_URL=http://homeassistant.local:8123
       - HA_TOKEN=your_long_lived_ha_token_here

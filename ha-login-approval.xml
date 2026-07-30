@@ -47,4 +47,6 @@ Panel de administración (elegir qué dispositivos reciben la notificación por 
   <Config Name="Metadata Key" Target="METADATA_KEY" Default="ha_notify_targets" Mode="" Description="No tocar salvo que sepas por qué. Nombre de la clave de metadato de usuario en ZITADEL donde se guarda la lista de dispositivos asignados a cada cuenta." Type="Variable" Display="advanced" Required="false" Mask="false">ha_notify_targets</Config>
 
   <Config Name="Puerto Web/API" Target="8000" Default="8000" Mode="tcp" Description="Puerto interno. El Target de ZITADEL debe apuntar a http://IP-de-este-contenedor:PUERTO/webhook/create-session — no lo expongas directamente a internet, solo debe ser alcanzable desde tu propio ZITADEL." Type="Port" Display="always" Required="true" Mask="false">8000</Config>
+
+  <Config Name="Datos persistentes" Target="/data" Default="/mnt/user/appdata/ha-login-approval" Mode="rw" Description="Carpeta persistente para la base de datos SQLite propia del servicio (códigos de recuperación de un solo uso, auditoría de logins, bloqueo de IP, personalización de la página de login) y para los ficheros .mmdb de GeoIP. Sin este volumen se pierde todo al recrear el contenedor." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/ha-login-approval</Config>
 </Container>
