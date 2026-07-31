@@ -53,6 +53,10 @@ _access_tokens: dict[str, dict] = {}
 
 _FAILURE_STATUSES = {"rejected", "timeout", "denied", "send_failed"}
 
+_ACCESS_TOKEN_TTL_SECONDS = 300
+_CLEANUP_INTERVAL_SECONDS = 60
+_cleanup_task: asyncio.Task | None = None
+
 
 def _issuer() -> str:
     return settings.idp_issuer_url.rstrip("/")
@@ -424,11 +428,13 @@ async def token(
         email=entry["email"],
     )
     access_token = uuid.uuid4().hex
-    _access_tokens[access_token] = {"sub": entry["account_id"], "email": entry["email"]}
+    _access_tokens[access_token] = {
+        "sub": entry["account_id"], "email": entry["email"], "issued_at": time.time(),
+    }
     return {
         "access_token": access_token,
         "token_type": "Bearer",
-        "expires_in": 300,
+        "expires_in": _ACCESS_TOKEN_TTL_SECONDS,
         "id_token": id_token,
     }
 
@@ -449,3 +455,48 @@ async def userinfo(authorization: str | None = Header(default=None)):
         "email_verified": True,
         "preferred_username": claims["email"],
     }
+
+
+def _purge_expired_state() -> None:
+    """Prunes _pending/_auth_codes/_access_tokens of anything past its
+    natural lifetime. These are in-memory only (nothing worth persisting
+    across a restart, same as ha_client's own futures), but with no purge
+    at all they grow without bound from abandoned login attempts — a
+    closed tab, a bot hitting /authorize, an auth code or access token
+    that's never exchanged — memory that only goes up until the next
+    container restart."""
+    now = time.time()
+
+    for request_id, pending in list(_pending.items()):
+        if now - pending["created_at"] > settings.idp_login_timeout_seconds:
+            del _pending[request_id]
+
+    for code, entry in list(_auth_codes.items()):
+        if now - entry["issued_at"] > settings.idp_login_timeout_seconds:
+            del _auth_codes[code]
+
+    for access_token, entry in list(_access_tokens.items()):
+        if now - entry["issued_at"] > _ACCESS_TOKEN_TTL_SECONDS:
+            del _access_tokens[access_token]
+
+
+async def _periodic_cleanup_loop() -> None:
+    while True:
+        await asyncio.sleep(_CLEANUP_INTERVAL_SECONDS)
+        _purge_expired_state()
+
+
+async def start_periodic_cleanup() -> None:
+    global _cleanup_task
+    _cleanup_task = asyncio.create_task(_periodic_cleanup_loop())
+
+
+async def stop_periodic_cleanup() -> None:
+    global _cleanup_task
+    if _cleanup_task:
+        _cleanup_task.cancel()
+        try:
+            await _cleanup_task
+        except asyncio.CancelledError:
+            pass
+        _cleanup_task = None

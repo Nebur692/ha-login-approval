@@ -23,6 +23,7 @@ async def lifespan(app: FastAPI):
     await db.init_db()
     await idp_jwt.ensure_signing_key()
     await geoip_updater.start_periodic_updater()
+    await idp.start_periodic_cleanup()
     await ha_client.validate_connectivity()
     await ha_client.start_ws_listener()
 
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
 
     await ha_client.stop_ws_listener()
     await ha_client.close_client()
+    await idp.stop_periodic_cleanup()
     await geoip_updater.stop_periodic_updater()
     await db.close_db()
 

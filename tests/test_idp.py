@@ -776,3 +776,83 @@ async def test_fail_unknown_request_404(client, idp_ready):
     assert resp.status_code == 404
 
 
+async def test_purge_removes_expired_pending_but_keeps_fresh(idp_ready, monkeypatch):
+    monkeypatch.setattr(settings, "idp_login_timeout_seconds", 300)
+    now = time.time()
+    idp_router._pending["expired"] = {"created_at": now - 301}
+    idp_router._pending["fresh"] = {"created_at": now}
+
+    idp_router._purge_expired_state()
+
+    assert "expired" not in idp_router._pending
+    assert "fresh" in idp_router._pending
+
+
+async def test_purge_removes_expired_auth_codes_but_keeps_fresh(idp_ready, monkeypatch):
+    monkeypatch.setattr(settings, "idp_login_timeout_seconds", 300)
+    now = time.time()
+    idp_router._auth_codes["expired"] = {"issued_at": now - 301}
+    idp_router._auth_codes["fresh"] = {"issued_at": now}
+
+    idp_router._purge_expired_state()
+
+    assert "expired" not in idp_router._auth_codes
+    assert "fresh" in idp_router._auth_codes
+
+
+async def test_purge_removes_expired_access_tokens_but_keeps_fresh(idp_ready):
+    now = time.time()
+    idp_router._access_tokens["expired"] = {"issued_at": now - idp_router._ACCESS_TOKEN_TTL_SECONDS - 1}
+    idp_router._access_tokens["fresh"] = {"issued_at": now}
+
+    idp_router._purge_expired_state()
+
+    assert "expired" not in idp_router._access_tokens
+    assert "fresh" in idp_router._access_tokens
+
+
+async def test_full_flow_access_token_survives_purge_immediately_after_issuance(client, idp_ready):
+    """Guards against an off-by-something that would purge a token before
+    its advertised expires_in has actually elapsed."""
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    complete_resp = await client.get(f"/idp/complete/{request_id}", follow_redirects=False)
+    code = complete_resp.headers["location"].split("code=")[1].split("&")[0]
+
+    token_resp = await client.post(
+        "/token",
+        data={"grant_type": "authorization_code", "code": code, "redirect_uri": REDIRECT_URI},
+        headers={"Authorization": "Basic dGVzdC1ycDp0ZXN0LXJwLXNlY3JldA=="},
+    )
+    access_token = token_resp.json()["access_token"]
+
+    idp_router._purge_expired_state()
+
+    assert access_token in idp_router._access_tokens
+
+
+async def test_periodic_cleanup_loop_purges_on_each_tick(idp_ready, monkeypatch):
+    idp_router._pending["expired"] = {"created_at": 0}
+
+    sleep_calls = []
+
+    async def fake_sleep(seconds):
+        sleep_calls.append(seconds)
+        if len(sleep_calls) > 1:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(idp_router.asyncio, "sleep", fake_sleep)
+
+    with pytest.raises(asyncio.CancelledError):
+        await idp_router._periodic_cleanup_loop()
+
+    assert sleep_calls == [idp_router._CLEANUP_INTERVAL_SECONDS] * 2
+    assert "expired" not in idp_router._pending
+
+
