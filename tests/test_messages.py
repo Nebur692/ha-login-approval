@@ -91,14 +91,34 @@ def test_bridge_page_strings_unknown_falls_back_to_english():
 
 
 def test_recovery_warning_exhausted_spanish():
-    notification = recovery_warning_notification("es", remaining=0)
+    notification = recovery_warning_notification("es", remaining=0, ever_generated=True)
     assert notification["title"] == "Códigos de recuperación agotados"
     assert "panel de administración" in notification["body"]
 
 
 def test_recovery_warning_exhausted_english():
-    notification = recovery_warning_notification("en", remaining=0)
+    notification = recovery_warning_notification("en", remaining=0, ever_generated=True)
     assert notification["title"] == "Recovery codes exhausted"
+
+
+def test_recovery_warning_never_generated_does_not_claim_a_code_was_used():
+    """An account that never generated a batch was told "you've just used
+    your last code", which is simply false — it never had one to use."""
+    for lang, title in (("es", "Sin códigos de recuperación"), ("en", "No recovery codes")):
+        notification = recovery_warning_notification(lang, remaining=0, ever_generated=False)
+        assert notification["title"] == title
+        body = notification["body"].lower()
+        assert "usado" not in body and "used" not in body
+        assert "agotad" not in body and "exhaust" not in body
+
+
+def test_recovery_warning_exhausted_no_longer_claims_the_code_was_just_used():
+    """The same warning fires after an ordinary approved login, not only
+    right after consuming a code, so "you've just used" can't be asserted."""
+    for lang in ("es", "en"):
+        body = recovery_warning_notification(lang, remaining=0, ever_generated=True)["body"].lower()
+        assert "acabas de usar" not in body
+        assert "you've just used" not in body
 
 
 def test_recovery_warning_low_includes_remaining_count_spanish():

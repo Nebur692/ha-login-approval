@@ -101,6 +101,19 @@ async def verify_code(db, account_id: str, code: str, used_ip: str) -> bool:
     return False
 
 
+async def has_ever_been_generated(db, account_id: str) -> bool:
+    """Whether a batch was ever generated for this account. Distinct from
+    `remaining_count() == 0`, which is also true for an account that never
+    had any codes at all — the two cases need different wording in the
+    warning notification, since "you've run out" is simply false for
+    somebody who never generated a batch in the first place."""
+    cursor = await db.execute(
+        "SELECT 1 FROM recovery_code_generations WHERE account_id = ?",
+        (account_id,),
+    )
+    return await cursor.fetchone() is not None
+
+
 async def remaining_count(db, account_id: str) -> int:
     cursor = await db.execute(
         "SELECT current_generation FROM recovery_code_generations WHERE account_id = ?",

@@ -181,8 +181,13 @@ async def _maybe_warn_low_recovery_codes(account_id: str, targets: list[str]) ->
         remaining = await recovery_codes.remaining_count(get_db(), account_id)
         if remaining > settings.recovery_code_low_warning:
             return
+        ever_generated = True
+        if remaining == 0:
+            ever_generated = await recovery_codes.has_ever_been_generated(get_db(), account_id)
         lang = await ha_client.get_ha_language()
-        notification = messages.recovery_warning_notification(lang, remaining)
+        notification = messages.recovery_warning_notification(
+            lang, remaining, ever_generated=ever_generated,
+        )
     except Exception:
         logger.exception("Failed to prepare the low-recovery-codes warning for %s", account_id)
         return

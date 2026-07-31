@@ -672,7 +672,36 @@ async def test_normal_approved_login_warns_when_no_recovery_codes_were_ever_gene
     args = call_mock.call_args.args
     assert args[0] == "notify"
     assert args[1] == "mobile_app_x"
-    assert "exhausted" in args[2]["title"].lower()
+    # Reported from production: this used to say "you've just used your last
+    # recovery code" to an account that had never generated a batch at all.
+    assert args[2]["title"] == "No recovery codes"
+    assert "used" not in args[2]["message"].lower()
+
+
+async def test_exhausted_batch_on_normal_login_is_worded_as_run_out_not_just_used(client, idp_ready):
+    """Distinct from never having generated any: here a batch existed and
+    was fully consumed earlier, so the account really is out of codes —
+    but the code was not "just" used, this is an ordinary login."""
+    from app import recovery_codes
+
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    codes = await recovery_codes.generate_batch(db.get_db(), EMAIL, generated_by="admin", count=1)
+    await recovery_codes.verify_code(db.get_db(), EMAIL, codes[0], used_ip="1.2.3.4")
+
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    call_mock = AsyncMock()
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)), \
+         patch("app.routers.idp.ha_client.call_service", call_mock), \
+         patch("app.routers.idp.ha_client.get_ha_language", AsyncMock(return_value="en")):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    call_mock.assert_called_once()
+    args = call_mock.call_args.args
+    assert args[2]["title"] == "Recovery codes exhausted"
+    assert "just used" not in args[2]["message"].lower()
 
 
 async def test_normal_approved_login_warning_uses_ha_configured_spanish(client, idp_ready):
@@ -693,7 +722,7 @@ async def test_normal_approved_login_warning_uses_ha_configured_spanish(client, 
 
     call_mock.assert_called_once()
     args = call_mock.call_args.args
-    assert args[2]["title"] == "Códigos de recuperación agotados"
+    assert args[2]["title"] == "Sin códigos de recuperación"
 
 
 async def test_normal_approved_login_no_warning_with_plenty_of_codes(client, idp_ready):
