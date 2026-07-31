@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 DOWNLOAD_URL = "https://download.maxmind.com/geoip/databases/{edition_id}/download"
 UPDATE_INTERVAL_SECONDS = 30 * 24 * 3600
+FAILURE_RETRY_SECONDS = 3600
 
 _task: asyncio.Task | None = None
 
@@ -62,10 +63,15 @@ async def _download_edition(client: httpx.AsyncClient, edition_id: str, dest_fil
     return True
 
 
-async def update_once() -> None:
+async def update_once() -> bool:
+    """Returns whether at least one edition is now up to date, so the
+    caller can back off quickly on failure instead of waiting a full
+    cycle — a transient failure (network blip, a license key that was
+    just created and hasn't propagated on MaxMind's side yet) shouldn't
+    leave GeoIP disabled for a month."""
     if not settings.geoip_account_id or not settings.geoip_license_key:
         logger.info("GeoIP account/license not configured — skipping database download")
-        return
+        return True
 
     async with httpx.AsyncClient(timeout=60) as client:
         city_ok = await _download_edition(client, "GeoLite2-City", "GeoLite2-City.mmdb")
@@ -73,12 +79,14 @@ async def update_once() -> None:
 
     if city_ok or asn_ok:
         geoip.reload_readers()
+        return True
+    return False
 
 
 async def _periodic_loop() -> None:
     while True:
-        await update_once()
-        await asyncio.sleep(UPDATE_INTERVAL_SECONDS)
+        success = await update_once()
+        await asyncio.sleep(UPDATE_INTERVAL_SECONDS if success else FAILURE_RETRY_SECONDS)
 
 
 async def start_periodic_updater() -> None:

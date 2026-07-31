@@ -1,3 +1,4 @@
+import asyncio
 import io
 import tarfile
 from pathlib import Path
@@ -36,9 +37,10 @@ async def test_skips_download_when_unconfigured(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "geoip_license_key", "")
 
     with respx.mock:
-        await geoip_updater.update_once()
-    # No files written, no reload triggered.
+        result = await geoip_updater.update_once()
+    # No files written, no reload triggered, and treated as success (nothing to retry).
     assert list(tmp_path.iterdir()) == []
+    assert result is True
 
 
 @respx.mock
@@ -54,11 +56,12 @@ async def test_downloads_and_extracts_both_editions(updater_ready):
     )
 
     with patch("app.geoip_updater.geoip.reload_readers") as mock_reload:
-        await geoip_updater.update_once()
+        result = await geoip_updater.update_once()
 
     assert (updater_ready / "GeoLite2-City.mmdb").read_bytes() == b"fake city data"
     assert (updater_ready / "GeoLite2-ASN.mmdb").read_bytes() == b"fake asn data"
     mock_reload.assert_called_once()
+    assert result is True
 
 
 @respx.mock
@@ -73,11 +76,12 @@ async def test_one_edition_failing_does_not_block_the_other(updater_ready):
     )
 
     with patch("app.geoip_updater.geoip.reload_readers") as mock_reload:
-        await geoip_updater.update_once()
+        result = await geoip_updater.update_once()
 
     assert not (updater_ready / "GeoLite2-City.mmdb").exists()
     assert (updater_ready / "GeoLite2-ASN.mmdb").read_bytes() == b"fake asn data"
     mock_reload.assert_called_once()
+    assert result is True
 
 
 @respx.mock
@@ -90,6 +94,33 @@ async def test_both_editions_failing_skips_reload(updater_ready):
     )
 
     with patch("app.geoip_updater.geoip.reload_readers") as mock_reload:
-        await geoip_updater.update_once()
+        result = await geoip_updater.update_once()
 
     mock_reload.assert_not_called()
+    assert result is False
+
+
+@respx.mock
+async def test_periodic_loop_retries_soon_after_a_failure(updater_ready, monkeypatch):
+    """A failed attempt (e.g. a freshly-created license key that hasn't
+    propagated on MaxMind's side yet) must not lock GeoIP out for a full
+    month — it should back off to FAILURE_RETRY_SECONDS instead."""
+    respx.get("https://download.maxmind.com/geoip/databases/GeoLite2-City/download").mock(
+        return_value=httpx.Response(401)
+    )
+    respx.get("https://download.maxmind.com/geoip/databases/GeoLite2-ASN/download").mock(
+        return_value=httpx.Response(401)
+    )
+
+    sleep_calls = []
+
+    async def fake_sleep(seconds):
+        sleep_calls.append(seconds)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(geoip_updater.asyncio, "sleep", fake_sleep)
+
+    with pytest.raises(asyncio.CancelledError):
+        await geoip_updater._periodic_loop()
+
+    assert sleep_calls == [geoip_updater.FAILURE_RETRY_SECONDS]
