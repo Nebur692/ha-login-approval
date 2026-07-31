@@ -135,6 +135,7 @@ async def authorize(
     branding = await get_branding(get_db()) or {}
     return templates.TemplateResponse(request, "idp_bridge.html", {
         "request_id": request_id, "lang": lang, "strings": strings, "branding": branding,
+        "recovery_delay_seconds": settings.bridge_recovery_unlock_delay_seconds,
     })
 
 
@@ -214,6 +215,11 @@ async def _run_notify_and_wait(request_id: str, targets: list[str]) -> None:
 
     if outcome == ApprovalOutcome.APPROVED:
         await ip_blocking.record_success(db, account_id, pending["ip"])
+        # Otherwise an account that never generates a batch in the first
+        # place (remaining_count == 0 from day one) would never be warned
+        # at all — the recovery flow is the only other place this fires,
+        # and there's nothing to fall back to if no codes were ever made.
+        await _maybe_warn_low_recovery_codes(account_id, targets)
     elif outcome == ApprovalOutcome.REJECTED:
         # Explicit reject is a strong abuse signal — counts toward the
         # block threshold, unlike a silent timeout.
@@ -273,7 +279,11 @@ async def status(request_id: str):
     pending = _pending.get(request_id)
     if pending is None:
         raise HTTPException(status_code=404, detail="unknown or expired request")
-    return {"status": pending["status"], "recovery_available": _recovery_available(pending)}
+    return {
+        "status": pending["status"],
+        "recovery_available": _recovery_available(pending),
+        "waiting_since": pending.get("waiting_since"),
+    }
 
 
 @router.post("/idp/retry")

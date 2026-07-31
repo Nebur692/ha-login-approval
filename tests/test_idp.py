@@ -135,6 +135,34 @@ async def test_authorize_non_spanish_accept_language_defaults_to_english(client,
     assert '<html lang="en">' in resp.text
 
 
+async def test_authorize_bridge_page_includes_countdown_constant(client, idp_ready):
+    resp = await client.get("/authorize", params=_authorize_params())
+    assert f"RECOVERY_DELAY_SECONDS = {settings.bridge_recovery_unlock_delay_seconds};" in resp.text
+    assert 'id="countdown"' in resp.text
+
+
+async def test_status_endpoint_exposes_waiting_since_for_the_countdown(client, idp_ready):
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    data = (await client.get(f"/idp/status/{request_id}")).json()
+    assert isinstance(data["waiting_since"], float)
+
+
+async def test_status_endpoint_waiting_since_is_null_before_notifying(client, idp_ready):
+    resp = await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+    assert resp.status_code == 200
+
+    data = (await client.get(f"/idp/status/{request_id}")).json()
+    assert data["waiting_since"] is None
+
+
 async def test_authorize_trusts_x_forwarded_for_over_socket_peer(client, idp_ready):
     resp = await client.get(
         "/authorize",
@@ -594,6 +622,48 @@ async def test_no_warning_when_codes_well_above_threshold(client, idp_ready, mon
     call_mock = AsyncMock()
     with patch("app.routers.idp.ha_client.call_service", call_mock):
         await client.post("/idp/recovery", data={"request_id": request_id, "code": codes[0]})
+
+    call_mock.assert_not_called()
+
+
+async def test_normal_approved_login_warns_when_no_recovery_codes_were_ever_generated(client, idp_ready):
+    """An account that never generated a batch at all (remaining_count ==
+    0 from day one, not from using them all through the recovery flow)
+    would otherwise never be warned — the recovery flow's warning only
+    ever fires as a side effect of consuming a code, and there's nothing
+    to consume here."""
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    call_mock = AsyncMock()
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)), \
+         patch("app.routers.idp.ha_client.call_service", call_mock):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    call_mock.assert_called_once()
+    args = call_mock.call_args.args
+    assert args[0] == "notify"
+    assert args[1] == "mobile_app_x"
+    assert "exhausted" in args[2]["title"].lower()
+
+
+async def test_normal_approved_login_no_warning_with_plenty_of_codes(client, idp_ready):
+    from app import recovery_codes
+
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await recovery_codes.generate_batch(db.get_db(), EMAIL, generated_by="admin", count=10)
+
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    call_mock = AsyncMock()
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)), \
+         patch("app.routers.idp.ha_client.call_service", call_mock):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
 
     call_mock.assert_not_called()
 

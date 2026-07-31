@@ -18,10 +18,15 @@
     .secondary { background: none; border: 1px solid #888; }
     #waiting-step, #escalation, #recovery-step { display: none; }
     #error { color: #b00020; }
+    .spinner-wrap { position: relative; margin: 1.5em auto; width: 44px; height: 44px; }
     .spinner {
-      margin: 1.5em auto; width: 32px; height: 32px; border-radius: 50%;
+      position: absolute; inset: 0; border-radius: 50%;
       border: 4px solid #ddd; border-top-color: #555;
       animation: spin 0.8s linear infinite;
+    }
+    #countdown {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 0.8em; color: #555;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
@@ -39,7 +44,10 @@
   </div>
 
   <div id="waiting-step">
-    <div class="spinner"></div>
+    <div class="spinner-wrap">
+      <div class="spinner"></div>
+      <span id="countdown"></span>
+    </div>
     <p>{{ strings.waiting_message }}</p>
 
     <div id="escalation">
@@ -66,6 +74,7 @@
     const requestId = "{{ request_id }}";
     const STRINGS = {{ strings | tojson }};
     const POLL_INTERVAL_MS = 2000;
+    const RECOVERY_DELAY_SECONDS = {{ recovery_delay_seconds }};
     let polling = false;
 
     const emailStep = document.getElementById("email-step");
@@ -73,6 +82,25 @@
     const escalation = document.getElementById("escalation");
     const recoveryStep = document.getElementById("recovery-step");
     const errorEl = document.getElementById("error");
+    const countdownEl = document.getElementById("countdown");
+    let countdownTimer = null;
+
+    // Ticks locally every second between polls, but always resynced to the
+    // server's waiting_since (from /idp/status) so a page refresh, clock
+    // drift, or a retry (which resets waiting_since) never gets it wrong.
+    function syncCountdown(waitingSince) {
+      clearInterval(countdownTimer);
+      if (waitingSince == null) {
+        countdownEl.textContent = "";
+        return;
+      }
+      const render = () => {
+        const remaining = Math.ceil(RECOVERY_DELAY_SECONDS - (Date.now() / 1000 - waitingSince));
+        countdownEl.textContent = remaining > 0 ? remaining : "";
+      };
+      render();
+      countdownTimer = setInterval(render, 1000);
+    }
 
     function showOnly(...steps) {
       for (const el of [emailStep, waitingStep, recoveryStep]) {
@@ -140,6 +168,8 @@
         return;
       }
 
+      syncCountdown(data.waiting_since);
+
       if (data.recovery_available) {
         escalation.style.display = "block";
       }
@@ -170,6 +200,7 @@
       const data = await resp.json();
       if (data.status !== "awaiting_email") {
         showOnly(waitingStep);
+        syncCountdown(data.waiting_since);
         startPolling();
       } else {
         showOnly(emailStep);
