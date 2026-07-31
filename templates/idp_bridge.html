@@ -2,9 +2,15 @@
 <html lang="{{ lang }}">
 <head>
   <meta charset="utf-8">
-  <title>{{ strings.page_title }}</title>
+  <title>{{ branding.title or strings.page_title }}</title>
+  {% if branding.favicon_path %}<link rel="icon" href="/branding/favicon">{% endif %}
   <style>
-    body { font-family: sans-serif; max-width: 400px; margin: 10vh auto; text-align: center; padding: 0 1em; }
+    body {
+      font-family: sans-serif; max-width: 400px; margin: 10vh auto; text-align: center; padding: 0 1em;
+      {% if branding.background_path %}background: url('/branding/background') center/cover no-repeat fixed;{% endif %}
+    }
+    .logo { max-width: 160px; max-height: 160px; margin-bottom: 1em; }
+    {% if branding.background_path %}.card { background: rgba(255, 255, 255, 0.92); border-radius: 12px; padding: 1.5em; }{% endif %}
     input { width: 100%; padding: 0.5em; font-size: 1em; box-sizing: border-box; }
     button { padding: 0.5em 1.5em; font-size: 1em; margin-top: 1em; cursor: pointer; }
     .secondary { background: none; border: 1px solid #888; }
@@ -19,6 +25,8 @@
   </style>
 </head>
 <body>
+  <div class="{% if branding.background_path %}card{% endif %}">
+  {% if branding.logo_path %}<img class="logo" src="/branding/logo" alt="">{% endif %}
   <div id="email-step">
     <p>{{ strings.email_prompt }}</p>
     <form id="email-form">
@@ -49,6 +57,7 @@
 
   <p id="error"></p>
   <button id="go-back-button" class="secondary" style="display:none;">{{ strings.go_back_button }}</button>
+  </div>
 
   <script>
     const requestId = "{{ request_id }}";

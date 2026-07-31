@@ -59,6 +59,54 @@ async def test_authorize_shows_bridge_page(client, idp_ready):
     assert "email-form" in resp.text
 
 
+async def _set_branding(**fields):
+    now = "2026-01-01T00:00:00+00:00"
+    await db.get_db().execute(
+        "INSERT INTO bridge_branding (id, title, logo_path, background_path, favicon_path, updated_at) "
+        "VALUES (1, ?, ?, ?, ?, ?)",
+        (fields.get("title"), fields.get("logo_path"), fields.get("background_path"), fields.get("favicon_path"), now),
+    )
+    await db.get_db().commit()
+
+
+async def test_authorize_renders_custom_title_and_favicon_link(client, idp_ready, tmp_path):
+    favicon = tmp_path / "favicon.png"
+    favicon.write_bytes(b"fake-png-bytes")
+    await _set_branding(title="My Custom Login", favicon_path=str(favicon))
+
+    resp = await client.get("/authorize", params=_authorize_params())
+
+    assert "<title>My Custom Login</title>" in resp.text
+    assert '<link rel="icon" href="/branding/favicon">' in resp.text
+
+
+async def test_authorize_falls_back_to_default_title_without_branding(client, idp_ready):
+    resp = await client.get("/authorize", params=_authorize_params())
+    assert '<link rel="icon"' not in resp.text
+
+
+async def test_branding_asset_route_serves_the_stored_file(client, idp_ready, tmp_path):
+    favicon = tmp_path / "favicon.png"
+    favicon.write_bytes(b"fake-png-bytes")
+    await _set_branding(favicon_path=str(favicon))
+
+    resp = await client.get("/branding/favicon")
+
+    assert resp.status_code == 200
+    assert resp.content == b"fake-png-bytes"
+    assert resp.headers["content-type"] == "image/png"
+
+
+async def test_branding_asset_route_404_when_not_configured(client, idp_ready):
+    resp = await client.get("/branding/favicon")
+    assert resp.status_code == 404
+
+
+async def test_branding_asset_route_404_for_unknown_kind(client, idp_ready):
+    resp = await client.get("/branding/nonsense")
+    assert resp.status_code == 404
+
+
 async def test_authorize_defaults_to_english(client, idp_ready):
     resp = await client.get("/authorize", params=_authorize_params())
     assert '<html lang="en">' in resp.text

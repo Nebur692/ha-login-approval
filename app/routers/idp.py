@@ -31,11 +31,12 @@ import time
 import uuid
 
 from fastapi import APIRouter, Form, Header, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import accounts, audit, geoip, ha_client, idp_jwt, ip_blocking, messages, recovery_codes
 from app.approval_flow import ApprovalOutcome, LoginContext, run_approval
+from app.branding import CONTENT_TYPES, asset_path, get_branding
 from app.config import settings
 from app.db import get_db
 
@@ -131,9 +132,21 @@ async def authorize(
 
     lang = messages.detect_browser_lang(request.headers.get("accept-language"))
     strings = messages.bridge_page_strings(lang)
+    branding = await get_branding(get_db()) or {}
     return templates.TemplateResponse(request, "idp_bridge.html", {
-        "request_id": request_id, "lang": lang, "strings": strings,
+        "request_id": request_id, "lang": lang, "strings": strings, "branding": branding,
     })
+
+
+@router.get("/branding/{kind}")
+async def branding_asset(kind: str):
+    if kind not in ("logo", "background", "favicon"):
+        raise HTTPException(status_code=404)
+    branding = await get_branding(get_db())
+    path = asset_path(branding, kind)
+    if path is None or not path.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(path, media_type=CONTENT_TYPES.get(path.suffix.lstrip("."), "application/octet-stream"))
 
 
 _OUTCOME_TO_STATUS = {

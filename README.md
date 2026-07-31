@@ -188,7 +188,7 @@ All under `/admin`, protected by `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
 | **Audit** | Per-account history: approved / rejected / timed out / recovery code used / send failed, with timestamp, IP, browser, and (if GeoIP is configured) city/country/ISP. |
 | **Recovery codes** | Generate or regenerate a batch per account — shown once, then never retrievable again. Regenerating instantly invalidates every code from the previous batch. |
 | **Blocked IPs** | See who's currently blocked and unblock manually — important if three accidental rejects (or mistyped codes) lock out the real account owner. |
-| **Branding** | Upload a logo/background/favicon and set a title for the bridge page. *(Saved, not wired into the bridge page's rendering yet — a future polish pass.)* |
+| **Branding** | Upload a logo/background/favicon and set a title for the bridge page. Any image format or size is accepted — each is automatically converted and resized (logo/favicon to PNG, background to JPEG). |
 
 ### 🧭 Usage — what it looks like for the person logging in
 
@@ -433,7 +433,7 @@ Todo bajo `/admin`, protegido por `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
 | **Audit** | Historial por cuenta: aprobado / rechazado / timeout / código de recuperación usado / envío fallido, con fecha, IP, navegador y (si GeoIP está configurado) ciudad/país/operador. |
 | **Recovery codes** | Generar o regenerar un lote por cuenta — se muestran una sola vez, luego nunca se pueden recuperar. Regenerar invalida al instante todos los códigos del lote anterior. |
 | **Blocked IPs** | Ver quién está bloqueado ahora mismo y desbloquear manualmente — importante si tres rechazos accidentales (o códigos mal tecleados) dejan fuera al dueño real de la cuenta. |
-| **Branding** | Sube un logo/fondo/favicon y pon un título para la página puente. *(Se guarda, todavía sin conectar al renderizado real de la página — pulido pendiente para más adelante.)* |
+| **Branding** | Sube un logo/fondo/favicon y pon un título para la página puente. Se acepta cualquier formato o tamaño de imagen — cada una se convierte y redimensiona automáticamente (logo/favicon a PNG, fondo a JPEG). |
 
 ### 🧭 Uso — cómo lo vive quien inicia sesión
 

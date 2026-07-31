@@ -1,4 +1,5 @@
 import base64
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -112,3 +113,38 @@ async def test_branding_save_and_reload(client, admin_ready):
 
     page = await client.get("/admin/branding", headers=AUTH)
     assert 'value="My Login"' in page.text
+
+
+async def test_branding_upload_converts_non_standard_format_and_oversized_image(client, admin_ready):
+    from io import BytesIO
+
+    from PIL import Image
+
+    # A BMP (non-standard for the web) and way larger than the favicon's
+    # 64x64 cap — both should be normalized away, not stored as-is.
+    buf = BytesIO()
+    Image.new("RGB", (2000, 2000), (10, 20, 30)).save(buf, format="BMP")
+
+    resp = await client.post(
+        "/admin/branding/save",
+        files={"favicon": ("weird.bmp", buf.getvalue(), "image/bmp")},
+        headers=AUTH,
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    saved = Path(settings.branding_asset_dir) / "favicon.png"
+    assert saved.exists()
+    with Image.open(saved) as img:
+        assert img.format == "PNG"
+        assert img.size == (64, 64)
+
+
+async def test_branding_upload_rejects_invalid_image(client, admin_ready):
+    resp = await client.post(
+        "/admin/branding/save",
+        files={"logo": ("not-an-image.png", b"definitely not an image", "image/png")},
+        headers=AUTH,
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
