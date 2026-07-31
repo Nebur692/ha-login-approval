@@ -59,6 +59,11 @@ async def test_authorize_shows_bridge_page(client, idp_ready):
     assert "email-form" in resp.text
 
 
+async def test_authorize_bridge_page_has_mobile_viewport_meta(client, idp_ready):
+    resp = await client.get("/authorize", params=_authorize_params())
+    assert '<meta name="viewport" content="width=device-width, initial-scale=1">' in resp.text
+
+
 async def _set_branding(**fields):
     now = "2026-01-01T00:00:00+00:00"
     await db.get_db().execute(
@@ -78,11 +83,13 @@ async def test_authorize_renders_custom_title_and_favicon_link(client, idp_ready
 
     assert "<title>My Custom Login</title>" in resp.text
     assert '<link rel="icon" href="/branding/favicon">' in resp.text
+    assert "<h1>My Custom Login</h1>" in resp.text
 
 
 async def test_authorize_falls_back_to_default_title_without_branding(client, idp_ready):
     resp = await client.get("/authorize", params=_authorize_params())
     assert '<link rel="icon"' not in resp.text
+    assert "<h1>" not in resp.text
 
 
 async def test_branding_asset_route_serves_the_stored_file(client, idp_ready, tmp_path):
