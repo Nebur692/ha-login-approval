@@ -37,6 +37,27 @@ def test_build_notification_missing_user_agent_fields_does_not_crash():
     assert "unknown" in text["body"]
 
 
+def test_build_notification_includes_location_when_geoip_available():
+    text = build_notification("es", {
+        "description": "Edge, 152.0.0.0", "ip": "1.2.3.4",
+        "geo_city": "Madrid", "geo_country": "ES", "geo_asn_org": "Movistar",
+    })
+    assert "Ubicación: Madrid, ES, Movistar" in text["body"]
+
+
+def test_build_notification_omits_location_line_without_geoip():
+    text = build_notification("es", {"description": "Edge", "ip": "1.2.3.4"})
+    assert "Ubicación" not in text["body"]
+
+
+def test_build_notification_location_skips_missing_geo_fields():
+    text = build_notification("en", {
+        "description": "Edge", "ip": "1.2.3.4",
+        "geo_city": None, "geo_country": "US", "geo_asn_org": None,
+    })
+    assert "Location: US" in text["body"]
+
+
 def test_detect_browser_lang_spanish():
     assert detect_browser_lang("es-ES,es;q=0.9,en;q=0.8") == "es"
 

@@ -18,7 +18,7 @@
   <tr><th>When</th><th>Result</th><th>IP</th><th>Browser</th><th>Location</th></tr>
   {% for e in events %}
   <tr>
-    <td>{{ e.occurred_at }}</td>
+    <td>{{ e.occurred_at | local_datetime }}</td>
     <td>{{ e.event_type }}</td>
     <td>{{ e.ip or "" }}</td>
     <td>{{ e.user_agent or "" }}</td>

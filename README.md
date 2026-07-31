@@ -49,7 +49,7 @@ any other standards-compliant one) can redirect to this service, and it handles 
   login always redirects back to your identity provider with a proper OIDC error response — it
   never leaves the browser stuck on a dead page.
 - **Optional GeoIP enrichment** (self-hosted MaxMind GeoLite2 — no third-party API call per login)
-  adds city/country/ISP to the audit log.
+  adds city/country/ISP to both the audit log and the push notification itself.
 - **Admin panel**: an at-a-glance home page, the account directory, per-account login history,
   recovery-code management, blocked-IP list, and page branding.
 
@@ -223,6 +223,13 @@ All under `/admin`, protected by `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
   [Setting up the passwordless flow](#-setting-up-the-passwordless-flow-step-by-step). Confirmed
   live: with "Is linking allowed" enabled but auto-linking left off, ZITADEL never even offers to
   link the account, it just fails outright.
+- **The notification, audit log, and IP-blocking all show your reverse proxy's own address instead
+  of the real caller's**: this service reads the client IP from the standard `X-Forwarded-For`
+  header when present, falling back to the raw connection otherwise — if your reverse proxy doesn't
+  set that header, everyone behind it looks like the same single IP (the proxy itself), which also
+  means the 3-strikes IP block would end up shared across every real visitor. Nginx Proxy Manager
+  sets it correctly out of the box; if you're using something else, make sure it forwards
+  `X-Forwarded-For` (or `X-Real-IP`) to this container.
 
 ### 💙 Support
 
@@ -278,7 +285,8 @@ cualquier otro que cumpla el estándar) puede redirigir a este servicio, que se 
   identidad con un error OIDC en condiciones — nunca deja el navegador atascado en una página
   muerta.
 - **Enriquecimiento GeoIP opcional** (MaxMind GeoLite2 autoalojado — sin llamar a ningún API de
-  terceros en cada login) añade ciudad/país/operador a la auditoría.
+  terceros en cada login) añade ciudad/país/operador tanto a la auditoría como a la propia
+  notificación push.
 - **Panel de administración**: resumen de un vistazo, directorio de cuentas, historial de login por
   cuenta, gestión de códigos de recuperación, lista de IPs bloqueadas, y personalización de la
   página.
@@ -461,6 +469,14 @@ Todo bajo `/admin`, protegido por `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
   en [Configurar el flujo sin contraseña](#-configurar-el-flujo-sin-contraseña-paso-a-paso).
   Confirmado en vivo: con "Is linking allowed" activado pero el auto-linking desactivado, ZITADEL
   ni siquiera ofrece vincular la cuenta, directamente falla.
+- **La notificación, la auditoría y el bloqueo por IP muestran la dirección de tu propio proxy
+  inverso en vez de la del que llama de verdad**: este servicio lee la IP del cliente de la cabecera
+  estándar `X-Forwarded-For` cuando está presente, y si no de `X-Real-IP`, cayendo a la conexión
+  cruda solo si ninguna de las dos existe — si tu proxy inverso no manda esa cabecera, todo el mundo
+  detrás de él parece la misma única IP (la del propio proxy), lo que además haría que el bloqueo a
+  los 3 fallos se compartiera entre todos los visitantes reales. Nginx Proxy Manager la manda bien
+  de fábrica; si usas otra cosa, asegúrate de que reenvía `X-Forwarded-For` (o `X-Real-IP`) a este
+  contenedor.
 
 ### 💙 Apoya el proyecto
 

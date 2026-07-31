@@ -32,6 +32,9 @@ class ApprovalOutcome(str, Enum):
 class LoginContext:
     ip: str
     browser_description: str
+    geo_city: str | None = None
+    geo_country: str | None = None
+    geo_asn_org: str | None = None
 
 
 async def run_approval(targets: list[str], request_id: str, context: LoginContext) -> ApprovalOutcome:
@@ -39,7 +42,13 @@ async def run_approval(targets: list[str], request_id: str, context: LoginContex
     assigned" themselves before calling this, since what to do about it is
     a caller-specific decision (see module docstring)."""
     lang = await ha_client.get_ha_language()
-    text = build_notification(lang, {"description": context.browser_description, "ip": context.ip})
+    text = build_notification(lang, {
+        "description": context.browser_description,
+        "ip": context.ip,
+        "geo_city": context.geo_city,
+        "geo_country": context.geo_country,
+        "geo_asn_org": context.geo_asn_org,
+    })
 
     send_failures = 0
     for target in targets:

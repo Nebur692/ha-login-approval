@@ -12,13 +12,15 @@ available at this hook point. Only the browser and the source IP are."""
 _TEMPLATES = {
     "es": {
         "title": "Intento de inicio de sesión",
-        "body": "Navegador: {browser}\nIP: {ip}\n\n¿Eres tú?",
+        "body": "Navegador: {browser}\nIP: {ip}{location}\n\n¿Eres tú?",
+        "location_label": "Ubicación",
         "approve": "Aprobar",
         "reject": "Rechazar",
     },
     "en": {
         "title": "Sign-in attempt",
-        "body": "Browser: {browser}\nIP: {ip}\n\nWas this you?",
+        "body": "Browser: {browser}\nIP: {ip}{location}\n\nWas this you?",
+        "location_label": "Location",
         "approve": "Approve",
         "reject": "Reject",
     },
@@ -38,13 +40,17 @@ def extract_browser_name(description: str) -> str:
 def build_notification(lang: str, user_agent: dict) -> dict:
     """Returns {title, body, approve, reject} in a single language, with the
     browser/IP details from the CreateSession payload's userAgent field
-    filled in."""
+    filled in. Location/ISP (geo_city/geo_country/geo_asn_org) are optional —
+    left out of the body entirely when GeoIP isn't configured or the lookup
+    came up empty, rather than showing a blank "Location: " line."""
     template = _TEMPLATES.get(lang, _TEMPLATES[_DEFAULT_LANG])
     browser = extract_browser_name(user_agent.get("description", ""))
     ip = user_agent.get("ip", "unknown")
+    geo_parts = [p for p in (user_agent.get("geo_city"), user_agent.get("geo_country"), user_agent.get("geo_asn_org")) if p]
+    location = f"\n{template['location_label']}: {', '.join(geo_parts)}" if geo_parts else ""
     return {
         "title": template["title"],
-        "body": template["body"].format(browser=browser, ip=ip),
+        "body": template["body"].format(browser=browser, ip=ip, location=location),
         "approve": template["approve"],
         "reject": template["reject"],
     }

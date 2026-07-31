@@ -57,6 +57,21 @@ def _issuer() -> str:
     return settings.idp_issuer_url.rstrip("/")
 
 
+def _client_ip(request: Request) -> str:
+    # Behind a reverse proxy (the deployment this project assumes — see the
+    # README's note on IDP_ISSUER_URL), request.client.host is just the
+    # proxy's own container IP, not the real caller. Trust X-Forwarded-For's
+    # leftmost entry (the original client) when present, since that's what
+    # every notification, audit row, and IP-block decision keys off of.
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+    return request.client.host if request.client else "unknown"
+
+
 @router.get("/.well-known/openid-configuration")
 async def discovery():
     base = _issuer()
@@ -104,7 +119,7 @@ async def authorize(
         "status": "awaiting_email",
         "email": login_hint,
         "account_id": None,
-        "ip": request.client.host if request.client else "unknown",
+        "ip": _client_ip(request),
         "user_agent": request.headers.get("user-agent", ""),
     }
 
@@ -173,7 +188,14 @@ async def _run_notify_and_wait(request_id: str, targets: list[str]) -> None:
     pending["status"] = "waiting"
     pending["waiting_since"] = time.time()
 
-    context = LoginContext(ip=pending["ip"], browser_description=pending["user_agent"])
+    geo = geoip.lookup(pending["ip"])
+    context = LoginContext(
+        ip=pending["ip"],
+        browser_description=pending["user_agent"],
+        geo_city=geo.city,
+        geo_country=geo.country,
+        geo_asn_org=geo.asn_org,
+    )
     outcome = await run_approval(targets, request_id, context)
     pending["status"] = _OUTCOME_TO_STATUS[outcome]
 
@@ -270,7 +292,7 @@ async def submit_recovery_code(request: Request, request_id: str = Form(...), co
         raise HTTPException(status_code=403, detail="recovery code not available yet")
 
     db = get_db()
-    ip = request.client.host if request.client else "unknown"
+    ip = _client_ip(request)
     account_id = pending["account_id"]
 
     if await ip_blocking.is_blocked(db, account_id, ip):

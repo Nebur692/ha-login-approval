@@ -134,13 +134,12 @@
 
       const terminal = ["rejected", "timeout", "denied", "send_failed"];
       if (terminal.includes(data.status)) {
-        errorEl.innerText = STRINGS.error_not_approved;
-        // Recovery/retry stay available — don't stop showing them, just
-        // stop polling for an approval that already failed definitively.
-        // The user always gets an explicit way back to the RP too, so the
-        // page never becomes a dead end with nothing to click.
+        // The button stays as a manual fallback, but the page redirects
+        // back to the RP on its own, immediately — nobody should have to
+        // click anything just to get back to a failed login.
         document.getElementById("go-back-button").style.display = "inline-block";
         polling = false;
+        window.location.href = `/idp/fail/${requestId}`;
         return;
       }
 

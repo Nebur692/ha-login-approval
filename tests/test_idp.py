@@ -80,6 +80,17 @@ async def test_authorize_non_spanish_accept_language_defaults_to_english(client,
     assert '<html lang="en">' in resp.text
 
 
+async def test_authorize_trusts_x_forwarded_for_over_socket_peer(client, idp_ready):
+    resp = await client.get(
+        "/authorize",
+        params=_authorize_params(),
+        headers={"x-forwarded-for": "203.0.113.7, 192.168.100.22"},
+    )
+    request_id = idp_router._pending.copy().popitem()[0]
+    assert resp.status_code == 200
+    assert idp_router._pending[request_id]["ip"] == "203.0.113.7"
+
+
 async def test_discovery_document(client, idp_ready):
     resp = await client.get("/.well-known/openid-configuration")
     assert resp.status_code == 200

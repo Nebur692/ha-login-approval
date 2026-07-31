@@ -14,7 +14,7 @@
   <tr>
     <td>{{ b.account_id }}</td>
     <td>{{ b.ip }}</td>
-    <td>{{ b.blocked_at }}</td>
+    <td>{{ b.blocked_at | local_datetime }}</td>
     <td>
       <form method="post" action="/admin/blocked-ips/unblock" style="margin:0;">
         <input type="hidden" name="account_id" value="{{ b.account_id }}">
