@@ -1,4 +1,10 @@
-from app.messages import bridge_page_strings, build_notification, detect_browser_lang, extract_browser_name
+from app.messages import (
+    bridge_page_strings,
+    build_notification,
+    detect_browser_lang,
+    extract_browser_name,
+    recovery_warning_notification,
+)
 
 
 def test_extract_browser_name_drops_version_and_rest():
@@ -82,3 +88,31 @@ def test_bridge_page_strings_spanish():
 def test_bridge_page_strings_unknown_falls_back_to_english():
     strings = bridge_page_strings("de")
     assert strings["continue_button"] == "Continue"
+
+
+def test_recovery_warning_exhausted_spanish():
+    notification = recovery_warning_notification("es", remaining=0)
+    assert notification["title"] == "Códigos de recuperación agotados"
+    assert "panel de administración" in notification["body"]
+
+
+def test_recovery_warning_exhausted_english():
+    notification = recovery_warning_notification("en", remaining=0)
+    assert notification["title"] == "Recovery codes exhausted"
+
+
+def test_recovery_warning_low_includes_remaining_count_spanish():
+    notification = recovery_warning_notification("es", remaining=2)
+    assert notification["title"] == "Quedan pocos códigos de recuperación"
+    assert "2" in notification["body"]
+
+
+def test_recovery_warning_low_includes_remaining_count_english():
+    notification = recovery_warning_notification("en", remaining=2)
+    assert notification["title"] == "Recovery codes running low"
+    assert "2" in notification["body"]
+
+
+def test_recovery_warning_unknown_language_falls_back_to_english():
+    notification = recovery_warning_notification("de", remaining=0)
+    assert notification["title"] == "Recovery codes exhausted"

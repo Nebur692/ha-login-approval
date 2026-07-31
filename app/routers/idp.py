@@ -168,20 +168,26 @@ async def _log_audit(account_id: str, request_id: str, event_type: str, ip: str,
 
 
 async def _maybe_warn_low_recovery_codes(account_id: str, targets: list[str]) -> None:
-    remaining = await recovery_codes.remaining_count(get_db(), account_id)
-    if remaining == 0:
-        title = "Recovery codes exhausted"
-        body = ("You've just used your last one-time recovery code for this account — "
-                "generate a new batch from the admin panel as soon as possible.")
-    elif remaining <= settings.recovery_code_low_warning:
-        title = "Recovery codes running low"
-        body = f"Only {remaining} recovery code(s) left for this account."
-    else:
+    """Never raises — this is a best-effort side note on top of an
+    otherwise-successful login/recovery, called both inline (from
+    /idp/recovery, where an exception would turn a valid code into a 500)
+    and from a background task (where it would otherwise silently skip
+    the audit log entry written right after it)."""
+    try:
+        remaining = await recovery_codes.remaining_count(get_db(), account_id)
+        if remaining > settings.recovery_code_low_warning:
+            return
+        lang = await ha_client.get_ha_language()
+        notification = messages.recovery_warning_notification(lang, remaining)
+    except Exception:
+        logger.exception("Failed to prepare the low-recovery-codes warning for %s", account_id)
         return
 
     for target in targets:
         try:
-            await ha_client.call_service("notify", target, {"title": title, "message": body})
+            await ha_client.call_service("notify", target, {
+                "title": notification["title"], "message": notification["body"],
+            })
         except Exception:
             logger.exception("Failed to send low-recovery-codes warning to %s", target)
 

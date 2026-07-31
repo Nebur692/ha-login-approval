@@ -354,6 +354,26 @@ async def test_send_failed_makes_recovery_immediately_available(client, idp_read
     assert status_resp.json()["recovery_available"] is True
 
 
+async def test_recovery_flow_survives_a_failure_fetching_ha_language(client, idp_ready, monkeypatch):
+    """The low-recovery-codes warning is best-effort — if HA is
+    unreachable when fetching its configured language, a valid recovery
+    code must still complete the login instead of turning into a 500."""
+    monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 0)
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    with patch("app.routers.idp.recovery_codes.verify_code", AsyncMock(return_value=True)), \
+         patch("app.routers.idp.ha_client.get_ha_language", AsyncMock(side_effect=RuntimeError("HA unreachable"))):
+        resp = await client.post("/idp/recovery", data={"request_id": request_id, "code": "AAAA-AAAA-AAAA"})
+
+    assert resp.status_code == 200
+
+
 async def test_recovery_code_completes_login_after_timeout(client, idp_ready, monkeypatch):
     monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 0)
     await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
@@ -369,7 +389,8 @@ async def test_recovery_code_completes_login_after_timeout(client, idp_ready, mo
     assert status_resp.json()["recovery_available"] is True
 
     with patch("app.routers.idp.recovery_codes.verify_code", AsyncMock(return_value=True)), \
-         patch("app.routers.idp.ha_client.call_service", AsyncMock()):
+         patch("app.routers.idp.ha_client.call_service", AsyncMock()), \
+         patch("app.routers.idp.ha_client.get_ha_language", AsyncMock(return_value="en")):
         recovery_resp = await client.post("/idp/recovery", data={"request_id": request_id, "code": "AAAA-AAAA-AAAA"})
     assert recovery_resp.status_code == 200
 
@@ -535,7 +556,8 @@ async def test_correct_recovery_code_logs_audit_and_resets_counter(client, idp_r
         await asyncio.sleep(0.05)
 
     with patch("app.routers.idp.recovery_codes.verify_code", AsyncMock(return_value=True)), \
-         patch("app.routers.idp.ha_client.call_service", AsyncMock()):
+         patch("app.routers.idp.ha_client.call_service", AsyncMock()), \
+         patch("app.routers.idp.ha_client.get_ha_language", AsyncMock(return_value="en")):
         resp = await client.post("/idp/recovery", data={"request_id": request_id, "code": "AAAA-AAAA-AAAA"})
     assert resp.status_code == 200
 
@@ -565,7 +587,8 @@ async def test_low_recovery_codes_triggers_warning_notification(client, idp_read
         await asyncio.sleep(0.05)
 
     call_mock = AsyncMock()
-    with patch("app.routers.idp.ha_client.call_service", call_mock):
+    with patch("app.routers.idp.ha_client.call_service", call_mock), \
+         patch("app.routers.idp.ha_client.get_ha_language", AsyncMock(return_value="en")):
         await client.post("/idp/recovery", data={"request_id": request_id, "code": codes[2]})
 
     call_mock.assert_called_once()
@@ -595,7 +618,8 @@ async def test_low_recovery_codes_warning_at_threshold_not_exhausted(client, idp
         await asyncio.sleep(0.05)
 
     call_mock = AsyncMock()
-    with patch("app.routers.idp.ha_client.call_service", call_mock):
+    with patch("app.routers.idp.ha_client.call_service", call_mock), \
+         patch("app.routers.idp.ha_client.get_ha_language", AsyncMock(return_value="en")):
         await client.post("/idp/recovery", data={"request_id": request_id, "code": codes[1]})
 
     call_mock.assert_called_once()
@@ -639,7 +663,8 @@ async def test_normal_approved_login_warns_when_no_recovery_codes_were_ever_gene
 
     call_mock = AsyncMock()
     with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)), \
-         patch("app.routers.idp.ha_client.call_service", call_mock):
+         patch("app.routers.idp.ha_client.call_service", call_mock), \
+         patch("app.routers.idp.ha_client.get_ha_language", AsyncMock(return_value="en")):
         await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
         await asyncio.sleep(0.05)
 
@@ -648,6 +673,27 @@ async def test_normal_approved_login_warns_when_no_recovery_codes_were_ever_gene
     assert args[0] == "notify"
     assert args[1] == "mobile_app_x"
     assert "exhausted" in args[2]["title"].lower()
+
+
+async def test_normal_approved_login_warning_uses_ha_configured_spanish(client, idp_ready):
+    """The warning's language follows HA's own configured language (same
+    source as the sign-in notification itself), not the browser's — there
+    is no browser request by the time this fires from background code."""
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    call_mock = AsyncMock()
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)), \
+         patch("app.routers.idp.ha_client.call_service", call_mock), \
+         patch("app.routers.idp.ha_client.get_ha_language", AsyncMock(return_value="es")):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    call_mock.assert_called_once()
+    args = call_mock.call_args.args
+    assert args[2]["title"] == "Códigos de recuperación agotados"
 
 
 async def test_normal_approved_login_no_warning_with_plenty_of_codes(client, idp_ready):

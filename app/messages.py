@@ -56,6 +56,41 @@ def build_notification(lang: str, user_agent: dict) -> dict:
     }
 
 
+_RECOVERY_WARNING_TEMPLATES = {
+    "es": {
+        "exhausted_title": "Códigos de recuperación agotados",
+        "exhausted_body": (
+            "Acabas de usar tu último código de recuperación de un solo uso para esta cuenta — "
+            "genera un lote nuevo desde el panel de administración cuanto antes."
+        ),
+        "low_title": "Quedan pocos códigos de recuperación",
+        "low_body": "Solo quedan {remaining} código(s) de recuperación para esta cuenta.",
+    },
+    "en": {
+        "exhausted_title": "Recovery codes exhausted",
+        "exhausted_body": (
+            "You've just used your last one-time recovery code for this account — generate a "
+            "new batch from the admin panel as soon as possible."
+        ),
+        "low_title": "Recovery codes running low",
+        "low_body": "Only {remaining} recovery code(s) left for this account.",
+    },
+}
+_RECOVERY_WARNING_DEFAULT_LANG = "en"
+
+
+def recovery_warning_notification(lang: str, remaining: int) -> dict:
+    """Returns {title, body} for the low/exhausted recovery-codes push
+    warning, in HA's configured language — same source as the sign-in
+    notification itself (build_notification/get_ha_language), since this
+    fires from background approval-flow code with no browser request to
+    read an Accept-Language header from."""
+    template = _RECOVERY_WARNING_TEMPLATES.get(lang, _RECOVERY_WARNING_TEMPLATES[_RECOVERY_WARNING_DEFAULT_LANG])
+    if remaining == 0:
+        return {"title": template["exhausted_title"], "body": template["exhausted_body"]}
+    return {"title": template["low_title"], "body": template["low_body"].format(remaining=remaining)}
+
+
 _BRIDGE_PAGE_STRINGS = {
     "es": {
         "page_title": "Iniciar sesión",
