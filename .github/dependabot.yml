@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # Pinned dependencies drift silently: everything here was pinned in
+  # 2024 and had accumulated 55 advisories by the time anyone looked.
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:41"
+    open-pull-requests-limit: 5
+    groups:
+      python-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
