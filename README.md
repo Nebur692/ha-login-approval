@@ -62,7 +62,8 @@ variables:
 
 | Variable | What it's for |
 |---|---|
-| `HA_BASE_URL` / `HA_TOKEN` | Your Home Assistant's internal URL and a [long-lived access token](https://developers.home-assistant.io/docs/auth_api/#long-lived-access-token). |
+| `HA_BASE_URL` | Your Home Assistant's internal URL, no trailing slash (e.g. `http://192.168.1.50:8123`). |
+| `HA_TOKEN` | A Home Assistant [long-lived access token](https://developers.home-assistant.io/docs/auth_api/#long-lived-access-token) (Profile → Security → Long-Lived Access Tokens). Needs permission to call `notify.*` services and to read `mobile_app_notification_action` events over the WebSocket. |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Login for this project's own `/admin` panel (HTTP Basic — a small internal tool, not worth a full session system). |
 
 **OIDC provider (all required):**
@@ -82,7 +83,7 @@ variables:
 | `IP_BLOCK_THRESHOLD` | `3` | Consecutive failures (explicit reject or wrong recovery code, same account + IP) before blocking. |
 | `RECOVERY_CODE_BATCH_SIZE` | `10` | How many recovery codes get generated at once from `/admin/recovery`. |
 | `RECOVERY_CODE_LOW_WARNING` | `3` | Push a warning once this many recovery codes (or fewer) remain. |
-| `GEOIP_ACCOUNT_ID` / `GEOIP_LICENSE_KEY` | *(empty)* | Optional free [MaxMind](https://www.maxmind.com/) account, to add city/country/ISP to the audit log. Left empty, that part of the audit log just stays blank — nothing else is affected. |
+| `GEOIP_ACCOUNT_ID` / `GEOIP_LICENSE_KEY` | *(empty)* | Optional free [MaxMind](https://www.maxmind.com/) account, to add city/country/ISP to both the audit log and the push notification itself. Left empty, that part just stays blank — login still works exactly the same. |
 
 A ready-to-use Unraid Community Applications template is included:
 [`ha-login-approval.xml`](ha-login-approval.xml), pointing at the published image
@@ -300,7 +301,8 @@ entorno:
 
 | Variable | Para qué sirve |
 |---|---|
-| `HA_BASE_URL` / `HA_TOKEN` | La URL interna de tu Home Assistant y un [token de acceso de larga duración](https://developers.home-assistant.io/docs/auth_api/#long-lived-access-token). |
+| `HA_BASE_URL` | La URL interna de tu Home Assistant, sin barra final (ej. `http://192.168.1.50:8123`). |
+| `HA_TOKEN` | Un [token de acceso de larga duración](https://developers.home-assistant.io/docs/auth_api/#long-lived-access-token) de Home Assistant (Perfil → Seguridad → Tokens de acceso de larga duración). Necesita permiso para llamar servicios `notify.*` y para leer eventos `mobile_app_notification_action` por WebSocket. |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Acceso al propio panel `/admin` (HTTP Basic — herramienta interna pequeña, no compensa un sistema de sesiones completo). |
 
 **Proveedor OIDC (todas requeridas):**
@@ -320,7 +322,7 @@ entorno:
 | `IP_BLOCK_THRESHOLD` | `3` | Fallos consecutivos (rechazo explícito o código incorrecto, misma cuenta + IP) antes de bloquear. |
 | `RECOVERY_CODE_BATCH_SIZE` | `10` | Cuántos códigos de recuperación se generan de golpe desde `/admin/recovery`. |
 | `RECOVERY_CODE_LOW_WARNING` | `3` | Avisar por push cuando queden este número de códigos o menos. |
-| `GEOIP_ACCOUNT_ID` / `GEOIP_LICENSE_KEY` | *(vacío)* | Cuenta gratuita opcional de [MaxMind](https://www.maxmind.com/), para añadir ciudad/país/operador a la auditoría. Vacío = esa parte de la auditoría queda en blanco, sin afectar a nada más. |
+| `GEOIP_ACCOUNT_ID` / `GEOIP_LICENSE_KEY` | *(vacío)* | Cuenta gratuita opcional de [MaxMind](https://www.maxmind.com/), para añadir ciudad/país/operador tanto a la auditoría como a la propia notificación push. Vacío = esa parte queda en blanco, el login sigue funcionando igual. |
 
 Incluye una plantilla lista para Community Applications de Unraid:
 [`ha-login-approval.xml`](ha-login-approval.xml), que apunta a la imagen ya publicada
