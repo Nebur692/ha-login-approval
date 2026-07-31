@@ -71,7 +71,7 @@ async def discovery():
         "id_token_signing_alg_values_supported": [idp_jwt.ALGORITHM],
         "scopes_supported": ["openid", "profile", "email"],
         "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
-        "claims_supported": ["sub", "email", "email_verified"],
+        "claims_supported": ["sub", "email", "email_verified", "preferred_username"],
     }
 
 
@@ -392,4 +392,9 @@ async def userinfo(authorization: str | None = Header(default=None)):
     claims = _access_tokens.get(authorization[len("Bearer "):])
     if claims is None:
         raise HTTPException(status_code=401, detail="invalid access token")
-    return {"sub": claims["sub"], "email": claims["email"], "email_verified": True}
+    return {
+        "sub": claims["sub"],
+        "email": claims["email"],
+        "email_verified": True,
+        "preferred_username": claims["email"],
+    }

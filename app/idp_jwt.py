@@ -74,6 +74,7 @@ def build_id_token(issuer: str, audience: str, subject: str, email: str, ttl_sec
         "exp": now + ttl_seconds,
         "email": email,
         "email_verified": True,
+        "preferred_username": email,
     }
     return jwt.encode(claims, _private_key_pem, algorithm=ALGORITHM, headers={"kid": _active_kid})
 

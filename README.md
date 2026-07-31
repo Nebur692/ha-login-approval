@@ -133,19 +133,23 @@ with no device assigned can never complete a passwordless login, so nothing work
    - **Client ID / Client secret:** the same `IDP_CLIENT_ID` / `IDP_CLIENT_SECRET` you set on this
      container.
    - **Scopes:** `openid profile email`.
-   - Under provider options: enable **"Is linking allowed"**, and leave automatic creation/update
-     **off** — accounts must already exist in ZITADEL, this service only vouches for who they are,
-     it doesn't create ZITADEL users.
+   - Under provider options: enable **"Is linking allowed"**, leave automatic creation/update
+     **off** (accounts must already exist in ZITADEL, this service only vouches for who they are,
+     it doesn't create ZITADEL users), and — **critical, confirmed by hand** — set **Auto-linking to
+     `Email`**. Without this, ZITADEL never tries to match the identity this service asserts against
+     an existing account, and every login fails with "Account Not Found" even though the button and
+     the notification both work fine.
    - If creating it fails with `Errors.Target.DeniedURL`: ZITADEL blocks private IP ranges by
      default (SSRF protection) — another reason `IDP_ISSUER_URL` should be a public domain, not a
      LAN address.
 2. **Add it to your org's login policy** so the button actually shows up on the login screen
    (Console → your organization's Login Policy → Identity Providers → add the one you just
    created).
-3. **Link a real account to it**: log in as that user, go to their account settings in ZITADEL,
-   and link the new external IDP (the same self-service flow used to link Google or any other IDP).
-   The identity this service asserts is simply the account's email, lowercased — make sure the
-   ZITADEL account's own email matches exactly.
+3. **Nothing else to do — the first real login links the account automatically.** As long as the
+   ZITADEL account's own email matches (lowercased) the email typed on the bridge page, ZITADEL
+   creates the link itself the moment the login is approved, and signs the user straight in. There
+   is no separate "go to account settings and link it" step to perform by hand — confirmed live,
+   end to end, with a real account and a real push approval.
 4. **Important, confirmed by hand**: ZITADEL does **not** forward whatever's typed in the
    `loginname` field to this service as a `login_hint` (a known, still-open ZITADEL bug — Keycloak's
    default external-IDP button doesn't send it either). This is why the bridge page always asks for
@@ -214,6 +218,11 @@ All under `/admin`, protected by `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
   outright — it's not just a client-side timer, so it won't appear early no matter what.
 - **Account (or its IP) not responding to anything**: check `/admin/blocked-ips` — three explicit
   rejects or wrong recovery codes block that account+IP pair until manually unblocked there.
+- **Notification is approved but the RP says "Account Not Found" (ZITADEL) or refuses to link**:
+  the IDP's auto-linking option isn't set to match by email — see the "Auto-linking" bullet under
+  [Setting up the passwordless flow](#-setting-up-the-passwordless-flow-step-by-step). Confirmed
+  live: with "Is linking allowed" enabled but auto-linking left off, ZITADEL never even offers to
+  link the account, it just fails outright.
 
 ### 💙 Support
 
@@ -357,19 +366,23 @@ login sin contraseña, así que nada funciona por accidente.
    - **Client ID / Client secret:** los mismos `IDP_CLIENT_ID` / `IDP_CLIENT_SECRET` que pusiste en
      este contenedor.
    - **Scopes:** `openid profile email`.
-   - En las opciones del proveedor: activa **"Is linking allowed"**, y deja la creación/actualización
-     automática **desactivadas** — las cuentas ya deben existir en ZITADEL, este servicio solo
-     confirma quién es quién, no crea usuarios de ZITADEL.
+   - En las opciones del proveedor: activa **"Is linking allowed"**, deja la creación/actualización
+     automática **desactivadas** (las cuentas ya deben existir en ZITADEL, este servicio solo
+     confirma quién es quién, no crea usuarios de ZITADEL), y — **crítico, confirmado a mano** —
+     pon **Auto-linking en `Email`**. Sin esto, ZITADEL nunca intenta casar la identidad que afirma
+     este servicio con una cuenta existente, y todos los logins fallan con "Account Not Found"
+     aunque el botón y la notificación funcionen perfectamente.
    - Si falla al crearlo con `Errors.Target.DeniedURL`: ZITADEL bloquea rangos de IP privados por
      defecto (protección SSRF) — otra razón más para que `IDP_ISSUER_URL` sea un dominio público,
      no una dirección de tu red local.
 2. **Añádelo a la política de login de tu organización** para que el botón aparezca de verdad en
    la pantalla de login (Consola → Login Policy de tu organización → Identity Providers → añade el
    que acabas de crear).
-3. **Vincula una cuenta real**: entra como ese usuario, ve a su configuración de cuenta en ZITADEL,
-   y vincula el nuevo IDP externo (el mismo flujo de autoservicio que se usa para vincular Google o
-   cualquier otro IDP). La identidad que afirma este servicio es simplemente el email de la cuenta
-   en minúsculas — asegúrate de que el email de la cuenta de ZITADEL coincide exactamente.
+3. **No hace falta nada más — el primer login real vincula la cuenta automáticamente.** Mientras el
+   email de la propia cuenta de ZITADEL coincida (en minúsculas) con el email tecleado en la página
+   puente, ZITADEL crea el vínculo él solo en el momento en que se aprueba el login, y entra
+   directamente. No hay ningún paso separado de "ir a la configuración de la cuenta y vincularlo a
+   mano" — confirmado en vivo, de extremo a extremo, con una cuenta real y una aprobación real.
 4. **Importante, confirmado a mano**: ZITADEL **no** reenvía lo que se escriba en el campo
    `loginname` a este servicio como `login_hint` (un bug real y todavía abierto de ZITADEL — el
    botón por defecto de Keycloak tampoco lo manda). Por eso la página puente siempre pide el email
@@ -443,6 +456,11 @@ Todo bajo `/admin`, protegido por `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
 - **La cuenta (o su IP) no responde a nada**: revisa `/admin/blocked-ips` — tres rechazos explícitos
   o códigos de recuperación incorrectos bloquean esa pareja cuenta+IP hasta desbloquearla ahí a
   mano.
+- **Se aprueba la notificación pero el RP dice "Account Not Found" (ZITADEL) o se niega a vincular**:
+  la opción de auto-linking del IDP no está puesta en "por email" — ver el punto de "Auto-linking"
+  en [Configurar el flujo sin contraseña](#-configurar-el-flujo-sin-contraseña-paso-a-paso).
+  Confirmado en vivo: con "Is linking allowed" activado pero el auto-linking desactivado, ZITADEL
+  ni siquiera ofrece vincular la cuenta, directamente falla.
 
 ### 💙 Apoya el proyecto
 
