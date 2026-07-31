@@ -24,9 +24,6 @@
   <nav>
     <a href="/admin" class="{% if active == 'home' %}active{% endif %}">Home</a>
     <a href="/admin/accounts" class="{% if active == 'accounts' %}active{% endif %}">Accounts</a>
-    {% if zitadel_enabled %}
-    <a href="/admin/devices" class="{% if active == 'devices' %}active{% endif %}">ZITADEL devices (legacy)</a>
-    {% endif %}
     <a href="/admin/audit" class="{% if active == 'audit' %}active{% endif %}">Audit</a>
     <a href="/admin/recovery" class="{% if active == 'recovery' %}active{% endif %}">Recovery codes</a>
     <a href="/admin/blocked-ips" class="{% if active == 'blocked_ips' %}active{% endif %}">Blocked IPs</a>

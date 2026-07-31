@@ -1,9 +1,9 @@
 """SQLite connection + migration runner.
 
-Introduced in v2.0.0 for state ZITADEL's per-user metadata API is a poor fit
-for: recovery codes, audit log, IP-block counters, bridge-page branding.
-`ha_notify_targets` (device assignment) stays in ZITADEL metadata — see
-zitadel_client.py — a single small value per user, already a good fit there.
+Holds everything this service needs to persist on its own: the account
+directory (accounts.py — email -> assigned HA devices), recovery codes,
+audit log, IP-block counters, and bridge-page branding. No relying party's
+API is ever consulted for any of this.
 
 Migrations are plain additive .sql scripts under app/migrations/, named
 `NNNN_description.sql`, applied in order and tracked in schema_migrations —

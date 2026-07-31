@@ -9,35 +9,19 @@ class Settings(BaseSettings):
     ha_base_url: str
     ha_token: str
 
-    # ZITADEL — only needed for the legacy Actions V2 webhook
-    # (routers/webhook.py), which is inherently ZITADEL-specific and
-    # entirely optional. Left unconfigured, that webhook and its
-    # ZITADEL-specific admin page (devices.py) are simply not registered —
-    # the passwordless OIDC provider (routers/idp.py) doesn't need any of
-    # this to work with ZITADEL, Keycloak, Authentik, or any other RP.
-    zitadel_base_url: str = ""
-    zitadel_client_id: str = ""
-    zitadel_client_secret: str = ""
-    zitadel_target_signing_key: str = ""
-    """Signing key ZITADEL returned when the webhook Target was created —
-    used to verify the `zitadel-signature` header on incoming requests."""
-
     # Admin panel (HTTP Basic Auth — small internal tool, few users)
     admin_username: str = "admin"
     admin_password: str
 
     # Approval flow
     approval_timeout_seconds: int = 120
-    """Must stay comfortably below ZITADEL's own 270s Action target timeout."""
+    """How long to wait for a tap before failing the login."""
 
-    metadata_key: str = "ha_notify_targets"
-
-    # v2.0.0 storage — recovery codes, audit log, IP-block state, branding
-    # (ha_notify_targets stays in ZITADEL metadata, unaffected by this)
+    # v2.0.0 storage — accounts, recovery codes, audit log, IP-block state, branding
     sqlite_db_path: str = "/data/ha-login-approval.db"
 
-    # v2.0.0 passwordless OIDC provider — this service acts as a generic
-    # external IDP for ZITADEL (and, per README, any OIDC-capable RP).
+    # Passwordless OIDC provider — this service acts as a generic external
+    # IDP for ZITADEL, Keycloak, Authentik, or any other OIDC-capable RP.
     idp_issuer_url: str = ""
     """Our own public base URL, e.g. https://ha-login.example.com — used as
     the `iss` claim and to build the discovery document's endpoint URLs."""

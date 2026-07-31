@@ -1,12 +1,10 @@
-"""Passwordless OIDC provider (v2.0.0): this service acts as a generic
-external IDP that ZITADEL, Keycloak, Authentik — any standard OIDC relying
-party — can redirect to. Deliberately independent of any specific RP's
-admin API: accounts are resolved through our own directory (accounts.py),
-never through zitadel_client.py (that module exists only for the legacy,
-inherently ZITADEL-specific Actions V2 webhook in routers/webhook.py).
-`sub` in the id_token is simply the account's normalized email — the only
-identity concept this service has of its own, and the value the RP's
-external-IDP link should be configured to match.
+"""Passwordless OIDC provider: this service acts as a generic external IDP
+that ZITADEL, Keycloak, Authentik — any standard OIDC relying party — can
+redirect to. Deliberately independent of any specific RP's admin API:
+accounts are resolved through our own directory (accounts.py). `sub` in
+the id_token is simply the account's normalized email — the only identity
+concept this service has of its own, and the value the RP's external-IDP
+link should be configured to match.
 
 Confirmed empirically against a real ZITADEL instance before writing this
 (see Fase 1 of the v2.0.0 plan): `login_hint` never arrives (a known,
@@ -199,8 +197,7 @@ async def _start_approval(request_id: str, email: str) -> None:
     if not targets:
         # No account configured for this email, or no HA devices assigned
         # to it — there is no password fallback in this flow, so it must
-        # deny rather than let the login through (unlike the legacy
-        # webhook, where this same situation just means "no 2FA set up").
+        # deny rather than let the login through.
         pending["status"] = "denied"
         return
 

@@ -1,18 +1,10 @@
-"""Shared core of the approval flow: send the actionable HA notification(s)
-to an already-resolved list of targets, and wait for a response.
+"""Core of the approval flow: send the actionable HA notification(s) to an
+already-resolved list of targets, and wait for a response.
 
-Deliberately platform-agnostic — this module never resolves "which account,
-which targets" itself, and never imports zitadel_client. That resolution is
-each caller's job, because it differs by design: the legacy Actions V2
-webhook (routers/webhook.py, v1.0.0) resolves targets via ZITADEL's own
-per-user metadata (inherently ZITADEL-specific, Actions V2 has no
-equivalent elsewhere); the passwordless OIDC flow (routers/idp.py, v2.0.0)
-resolves them via our own account directory (accounts.py), independent of
-whichever RP redirected the user here. Both callers already know whether
-they got zero targets before ever calling this — what to do about that
-differs too (the legacy webhook still has a password afterward, so it lets
-the login through; the passwordless flow has no fallback, so it must deny)
-and is entirely the caller's decision, not this module's.
+Takes `targets` already resolved rather than looking them up itself — the
+caller (routers/idp.py, via accounts.py) decides what "no targets assigned"
+means before ever calling this, since this module has no opinion on
+account resolution at all.
 """
 import logging
 from dataclasses import dataclass

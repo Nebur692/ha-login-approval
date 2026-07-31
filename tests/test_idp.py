@@ -168,7 +168,7 @@ async def test_unknown_email_is_denied(client, idp_ready):
 
 async def test_no_targets_denies_passwordless_login(client, idp_ready):
     """An account exists but has no devices assigned — must still deny,
-    unlike the legacy webhook where this just means "no 2FA configured"."""
+    since there's no password fallback in this flow."""
     await accounts.set_targets(db.get_db(), EMAIL, [])
 
     await client.get("/authorize", params=_authorize_params())

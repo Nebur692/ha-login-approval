@@ -1,13 +1,9 @@
-"""Our own account directory for the generic passwordless OIDC flow
-(routers/idp.py) — email -> assigned HA notify targets, stored entirely in
-our own SQLite. Deliberately independent of any relying party's admin API
-(ZITADEL, Keycloak, Authentik, ...): this project's whole point is to work
-as an external IDP for any of them, so the passwordless flow never talks
-to a specific RP to figure out who's who.
-
-The legacy Actions V2 webhook (routers/webhook.py) is the opposite case —
-inherently ZITADEL-specific, and keeps reading device assignment from
-ZITADEL's own per-user metadata via zitadel_client.py, untouched by this.
+"""The account directory for the passwordless OIDC flow (routers/idp.py) —
+email -> assigned HA notify targets, stored entirely in our own SQLite.
+Deliberately independent of any relying party's admin API (ZITADEL,
+Keycloak, Authentik, ...): this project's whole point is to work as an
+external IDP for any of them, so it never talks to a specific RP to figure
+out who's who.
 """
 import json
 from datetime import datetime, timezone
