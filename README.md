@@ -18,6 +18,8 @@
 
 ## English
 
+![HA Login Approval overview](.github/images/ha-login-approval_en.jpg)
+
 ### ✨ What this is
 
 This project turns your Home Assistant Companion App into your login method. Instead of typing a
@@ -251,6 +253,8 @@ or Home Assistant / Nabu Casa Inc. All are trademarks of their respective owners
 ---
 
 ## Español
+
+![Resumen de HA Login Approval](.github/images/ha-login-approval_es.jpg)
 
 ### ✨ Qué es esto
 

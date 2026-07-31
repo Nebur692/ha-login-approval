@@ -17,7 +17,7 @@ Admin panel: http://IP:8000/admin</Overview>
   <Category>Security:</Category>
   <WebUI>http://[IP]:[PORT:8000]/admin</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Nebur692/ha-login-approval/main/ha-login-approval.xml</TemplateURL>
-  <Icon/>
+  <Icon>https://raw.githubusercontent.com/Nebur692/ha-login-approval/main/.github/images/ha-login-approval_logo.png</Icon>
   <ExtraParams>--restart unless-stopped</ExtraParams>
   <PostArgs/>
   <DonateText>Support this project</DonateText>
