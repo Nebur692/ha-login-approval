@@ -82,6 +82,7 @@ variables:
 |---|---|---|
 | `APPROVAL_TIMEOUT_SECONDS` | `120` | How long the flow waits for a tap before failing. |
 | `BRIDGE_RECOVERY_UNLOCK_DELAY_SECONDS` | `60` | Seconds with no response before the bridge page offers retry/recovery-code options. The original approval keeps waiting in the background regardless. |
+| `TRUSTED_PROXIES` | *(empty)* | Reverse proxies whose `X-Forwarded-For` / `X-Real-IP` headers this service reads, as IPs or CIDRs (e.g. `["172.18.0.0/16"]`). Those headers are how a proxy reports who called it, and they are only used when the request arrives from an address listed here — otherwise the connecting address is used. Set this to your proxy so notifications, the audit log and IP blocking record the visitor rather than the proxy. |
 | `IP_BLOCK_THRESHOLD` | `3` | Consecutive failures (explicit reject or wrong recovery code, same account + IP) before blocking. |
 | `RECOVERY_CODE_BATCH_SIZE` | `10` | How many recovery codes get generated at once from `/admin/recovery`. |
 | `RECOVERY_CODE_LOW_WARNING` | `3` | Push a warning once this many recovery codes (or fewer) remain. |
@@ -323,6 +324,7 @@ entorno:
 |---|---|---|
 | `APPROVAL_TIMEOUT_SECONDS` | `120` | Cuánto espera el flujo a que pulses antes de fallar. |
 | `BRIDGE_RECOVERY_UNLOCK_DELAY_SECONDS` | `60` | Segundos sin respuesta antes de que la página ofrezca reintentar o usar un código de recuperación. La aprobación original sigue esperando en paralelo. |
+| `TRUSTED_PROXIES` | *(vacío)* | Proxies inversos cuyas cabeceras `X-Forwarded-For` / `X-Real-IP` lee este servicio, como IPs o CIDRs (p. ej. `["172.18.0.0/16"]`). Esas cabeceras son la forma que tiene un proxy de decir quién le llamó, y solo se usan cuando la petición llega desde una dirección de esta lista; si no, se usa la dirección de conexión. Ponlo apuntando a tu proxy para que las notificaciones, la auditoría y el bloqueo por IP registren al visitante y no al propio proxy. |
 | `IP_BLOCK_THRESHOLD` | `3` | Fallos consecutivos (rechazo explícito o código incorrecto, misma cuenta + IP) antes de bloquear. |
 | `RECOVERY_CODE_BATCH_SIZE` | `10` | Cuántos códigos de recuperación se generan de golpe desde `/admin/recovery`. |
 | `RECOVERY_CODE_LOW_WARNING` | `3` | Avisar por push cuando queden este número de códigos o menos. |

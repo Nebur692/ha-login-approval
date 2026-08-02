@@ -163,11 +163,25 @@ async def test_status_endpoint_waiting_since_is_null_before_notifying(client, id
     assert data["waiting_since"] is None
 
 
-async def test_authorize_trusts_x_forwarded_for_over_socket_peer(client, idp_ready):
+async def test_authorize_ignores_forwarding_headers_from_an_unlisted_sender(client, idp_ready):
+    """This value ends up in the approval notification, the audit log and the
+    block list, so it is only taken from a proxy named in TRUSTED_PROXIES."""
     resp = await client.get(
         "/authorize",
         params=_authorize_params(),
         headers={"x-forwarded-for": "203.0.113.7, 192.168.100.22"},
+    )
+    request_id = idp_router._pending.copy().popitem()[0]
+    assert resp.status_code == 200
+    assert idp_router._pending[request_id]["ip"] == "127.0.0.1"
+
+
+async def test_authorize_uses_the_forwarded_address_from_a_listed_proxy(client, idp_ready, monkeypatch):
+    monkeypatch.setattr(settings, "trusted_proxies", ["127.0.0.1"])
+    resp = await client.get(
+        "/authorize",
+        params=_authorize_params(),
+        headers={"x-forwarded-for": "203.0.113.7"},
     )
     request_id = idp_router._pending.copy().popitem()[0]
     assert resp.status_code == 200
@@ -885,3 +899,135 @@ async def test_periodic_cleanup_loop_purges_on_each_tick(idp_ready, monkeypatch)
     assert "expired" not in idp_router._pending
 
 
+
+
+# ---------------------------------------------------------------------------
+# A resend leaves the first attempt still waiting, on purpose
+# ---------------------------------------------------------------------------
+
+async def test_a_superseded_attempt_cannot_undo_a_login_that_succeeded(client, idp_ready):
+    """Observed in production: one login produced `approved` and then, 51
+    seconds later, `timeout` for the same request. /idp/retry starts a second
+    wait without stopping the first, and whichever loses eventually returns —
+    minutes later — carrying a result for a login that is long since decided.
+    """
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    slow = asyncio.Event()
+
+    async def first_attempt(*_args, **_kwargs):
+        await slow.wait()          # still waiting when the resend arrives
+        return ApprovalOutcome.TIMEOUT
+
+    with patch("app.routers.idp.run_approval", AsyncMock(side_effect=first_attempt)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    # The guest gives up waiting and asks for the notification again; this one
+    # is answered.
+    idp_router._pending[request_id]["waiting_since"] = time.time() - 999
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)), \
+         patch("app.routers.idp.ha_client.get_ha_language", AsyncMock(return_value="en")):
+        await client.post("/idp/retry", data={"request_id": request_id})
+        await asyncio.sleep(0.05)
+
+    assert idp_router._pending[request_id]["status"] == "approved"
+
+    # Now the abandoned first attempt finally gives up.
+    slow.set()
+    await asyncio.sleep(0.05)
+
+    assert idp_router._pending[request_id]["status"] == "approved"
+    rows = await db.get_db().execute_fetchall(
+        "SELECT event_type FROM login_events WHERE request_id = ?", (request_id,)
+    )
+    assert [r["event_type"] for r in rows] == ["approved"]
+
+
+async def test_a_late_tap_on_the_first_notification_still_works(client, idp_ready):
+    """The mirror image, and why the resend deliberately does not cancel the
+    original: answering the first notification after asking for a second one
+    must still complete the login."""
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    never = asyncio.Event()
+
+    async def second_attempt(*_args, **_kwargs):
+        await never.wait()
+        return ApprovalOutcome.TIMEOUT
+
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)), \
+         patch("app.routers.idp.ha_client.get_ha_language", AsyncMock(return_value="en")):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+
+    assert idp_router._pending[request_id]["status"] == "approved"
+    never.set()
+
+
+# ---------------------------------------------------------------------------
+# Recovery-code attempt limits
+# ---------------------------------------------------------------------------
+
+async def _reach_recovery(client, monkeypatch):
+    """Gets a login to the point where the recovery form is accepted."""
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.TIMEOUT)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+    # Past the delay the bridge page waits before offering the form at all.
+    idp_router._pending[request_id]["waiting_since"] = time.time() - 999
+    return request_id
+
+
+async def test_guessing_is_capped_per_login(client, idp_ready):
+    """Also caps how much Argon2 work a single /authorize can buy: each
+    attempt hashes once per unused code in the batch."""
+    idp_router._account_attempts.clear()
+    request_id = await _reach_recovery(client, None)
+
+    verify = AsyncMock(return_value=False)
+    # The per-IP block list would otherwise stop this at its own threshold of
+    # three; held open so what is being measured is the per-login cap.
+    with patch("app.routers.idp.recovery_codes.verify_code", verify), \
+         patch("app.routers.idp.ip_blocking.is_blocked", AsyncMock(return_value=False)):
+        for _ in range(idp_router._REQUEST_ATTEMPT_LIMIT + 3):
+            resp = await client.post(
+                "/idp/recovery", data={"request_id": request_id, "code": "WRONG-CODE-99"}
+            )
+            assert resp.status_code == 401
+
+    # Refused attempts never reach the hashing at all.
+    assert verify.await_count == idp_router._REQUEST_ATTEMPT_LIMIT
+
+
+async def test_the_cap_is_per_account_not_per_source_address(client, idp_ready, monkeypatch):
+    """The per-IP block list is the other half of this, but an attacker who
+    can choose the address it keys on gets a fresh counter every request.
+    This limit does not depend on the address at all."""
+    monkeypatch.setattr(settings, "trusted_proxies", ["127.0.0.1"])
+    idp_router._account_attempts.clear()
+
+    verify = AsyncMock(return_value=False)
+    refused = 0
+    with patch("app.routers.idp.recovery_codes.verify_code", verify):
+        # A fresh login and a fresh claimed IP each time — nothing an attacker
+        # controls carries over, so only the account-wide count is left.
+        for attempt in range(idp_router._ACCOUNT_ATTEMPT_LIMIT + 4):
+            request_id = await _reach_recovery(client, None)
+            resp = await client.post(
+                "/idp/recovery",
+                data={"request_id": request_id, "code": "WRONG-CODE-99"},
+                headers={"x-forwarded-for": f"203.0.113.{attempt + 1}"},
+            )
+            assert resp.status_code == 401
+            refused += 1
+
+    assert refused == idp_router._ACCOUNT_ATTEMPT_LIMIT + 4
+    assert verify.await_count == idp_router._ACCOUNT_ATTEMPT_LIMIT

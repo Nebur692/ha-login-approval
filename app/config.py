@@ -42,6 +42,16 @@ class Settings(BaseSettings):
     (the backend keeps waiting for the real HA response up to that longer
     timeout regardless of whether this UI escalation has kicked in)."""
 
+    # Reverse proxies whose forwarding headers this service accepts, as IPs or
+    # CIDRs (e.g. ["172.18.0.0/16"] or ["192.168.1.10"]).
+    #
+    # Empty means the headers are ignored and the peer address is used, which
+    # is the right default for a service reachable directly: `X-Forwarded-For`
+    # is client-supplied text, and believing it from an unknown sender lets the
+    # sender choose what the notification, the audit log and the block list all
+    # say. Configure this with your proxy and its real chain is used instead.
+    trusted_proxies: list[str] = []
+
     # v2.0.0 anti-abuse
     ip_block_threshold: int = 3
     """Consecutive failures (explicit rejects + wrong recovery codes, same

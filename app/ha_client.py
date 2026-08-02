@@ -163,7 +163,12 @@ async def wait_for_action(request_id: str, timeout: float) -> bool | None:
     except asyncio.TimeoutError:
         return None
     finally:
-        _pending.pop(request_id, None)
+        # Only clear our own entry. A resend registers a second waiter under
+        # the same request_id, and popping by key alone would let whichever
+        # attempt finished first delete the other one's future — leaving a
+        # waiter that no incoming action can ever resolve.
+        if _pending.get(request_id) is fut:
+            del _pending[request_id]
 
 
 def _resolve_action(action: str) -> None:

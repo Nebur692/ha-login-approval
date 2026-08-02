@@ -13,8 +13,15 @@ security = HTTPBasic()
 
 
 def require_admin(credentials: HTTPBasicCredentials = Depends(security)) -> str:
-    user_ok = secrets.compare_digest(credentials.username, settings.admin_username)
-    pass_ok = secrets.compare_digest(credentials.password, settings.admin_password)
+    # Compared as bytes: on str, compare_digest raises TypeError the moment a
+    # credential contains a non-ASCII character, so a password with an accent
+    # in it would turn every login into a 500 instead of a 401.
+    user_ok = secrets.compare_digest(
+        credentials.username.encode("utf-8"), settings.admin_username.encode("utf-8")
+    )
+    pass_ok = secrets.compare_digest(
+        credentials.password.encode("utf-8"), settings.admin_password.encode("utf-8")
+    )
     if not (user_ok and pass_ok):
         raise HTTPException(status_code=401, detail="Unauthorized", headers={"WWW-Authenticate": "Basic"})
     return credentials.username

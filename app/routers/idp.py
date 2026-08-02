@@ -29,12 +29,13 @@ import base64
 import logging
 import time
 import uuid
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Form, Header, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import accounts, audit, geoip, ha_client, idp_jwt, ip_blocking, messages, recovery_codes
+from app import accounts, audit, client_ip, geoip, ha_client, idp_jwt, ip_blocking, messages, recovery_codes
 from app.approval_flow import ApprovalOutcome, LoginContext, run_approval
 from app.branding import CONTENT_TYPES, asset_path, get_branding
 from app.config import settings
@@ -54,8 +55,76 @@ _access_tokens: dict[str, dict] = {}
 _FAILURE_STATUSES = {"rejected", "timeout", "denied", "send_failed"}
 
 _ACCESS_TOKEN_TTL_SECONDS = 300
+# An authorization code is redeemed by the relying party within a second or
+# two of the browser landing back on it, so it gets its own short life rather
+# than sharing idp_login_timeout_seconds — that setting exists to give a person
+# time to read a notification and tap it, which is a different question.
+_AUTH_CODE_TTL_SECONDS = 60
 _CLEANUP_INTERVAL_SECONDS = 60
 _cleanup_task: asyncio.Task | None = None
+
+# Recovery-code attempt limits.
+#
+# ip_blocking keys on (account, IP), which is the right shape for a stolen link
+# being hammered from one place, but an attacker choosing their own source
+# address gets a fresh counter every request. These two limits do not depend on
+# where the request appears to come from.
+#
+# In memory, like _pending: a restart clears them, which is the same tradeoff
+# the rest of the login state already makes.
+_ACCOUNT_ATTEMPT_WINDOW_SECONDS = 300
+_ACCOUNT_ATTEMPT_LIMIT = 10
+"""Across all logins for one account. A person needs one or two."""
+_REQUEST_ATTEMPT_LIMIT = 5
+"""Within a single login. Also caps how much Argon2 work one /authorize buys."""
+
+_account_attempts: dict[str, list[float]] = {}
+
+# A user agent is a header, so its length is the sender's choice. It is stored
+# on every audit row and shown in the approval notification.
+_MAX_USER_AGENT = 512
+# Nothing authenticates /authorize — anyone who can reach it can create pending
+# logins. They expire, but not before a determined caller could make a great
+# many, so the oldest give way rather than the process growing without limit.
+_MAX_PENDING = 500
+
+
+def _too_many_attempts(account_id: str, pending: dict) -> bool:
+    """Records this attempt and reports whether it should be refused."""
+    now = time.time()
+    recent = [
+        stamp for stamp in _account_attempts.get(account_id, [])
+        if now - stamp < _ACCOUNT_ATTEMPT_WINDOW_SECONDS
+    ]
+    recent.append(now)
+    _account_attempts[account_id] = recent
+
+    pending["recovery_attempts"] = pending.get("recovery_attempts", 0) + 1
+    return (
+        len(recent) > _ACCOUNT_ATTEMPT_LIMIT
+        or pending["recovery_attempts"] > _REQUEST_ATTEMPT_LIMIT
+    )
+
+
+# asyncio only holds a weak reference to a running task, so a task nobody keeps
+# can be collected mid-await and vanish silently. These are approval waits that
+# last minutes, which makes them exactly the kind that would.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> asyncio.Task:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    task.add_done_callback(_log_task_failure)
+    return task
+
+
+def _log_task_failure(task: asyncio.Task) -> None:
+    if task.cancelled():
+        return
+    if task.exception() is not None:
+        logger.error("Background approval task failed: %s", task.exception())
 
 
 def _issuer() -> str:
@@ -63,18 +132,11 @@ def _issuer() -> str:
 
 
 def _client_ip(request: Request) -> str:
-    # Behind a reverse proxy (the deployment this project assumes — see the
-    # README's note on IDP_ISSUER_URL), request.client.host is just the
-    # proxy's own container IP, not the real caller. Trust X-Forwarded-For's
-    # leftmost entry (the original client) when present, since that's what
-    # every notification, audit row, and IP-block decision keys off of.
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        return real_ip.strip()
-    return request.client.host if request.client else "unknown"
+    """See app/client_ip.py — forwarding headers are only believed from a
+    proxy listed in TRUSTED_PROXIES, because this address decides what the
+    approval notification says, what the audit log records, and who gets
+    blocked."""
+    return client_ip.resolve(request)
 
 
 @router.get("/.well-known/openid-configuration")
@@ -116,6 +178,9 @@ async def authorize(
         raise HTTPException(status_code=400, detail="unsupported_response_type")
 
     request_id = uuid.uuid4().hex
+    while len(_pending) >= _MAX_PENDING:
+        oldest = min(_pending, key=lambda key: _pending[key]["created_at"])
+        del _pending[oldest]
     _pending[request_id] = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -125,14 +190,14 @@ async def authorize(
         "email": login_hint,
         "account_id": None,
         "ip": _client_ip(request),
-        "user_agent": request.headers.get("user-agent", ""),
+        "user_agent": request.headers.get("user-agent", "")[:_MAX_USER_AGENT],
     }
 
     if login_hint:
         # Kept as a cheap, non-blocking check for forward-compatibility —
         # not expected to trigger with ZITADEL or Keycloak (see Fase 1),
         # but if some RP ever does send it, skip the email step entirely.
-        asyncio.create_task(_start_approval(request_id, login_hint))
+        _spawn(_start_approval(request_id, login_hint))
 
     lang = messages.detect_browser_lang(request.headers.get("accept-language"))
     strings = messages.bridge_page_strings(lang)
@@ -204,8 +269,20 @@ async def _maybe_warn_low_recovery_codes(account_id: str, targets: list[str]) ->
 async def _run_notify_and_wait(request_id: str, targets: list[str]) -> None:
     """(Re)sends the HA notification and waits for a response — shared by
     the first attempt and by /idp/retry, both of which already know the
-    resolved account_id and its assigned targets."""
-    pending = _pending[request_id]
+    resolved account_id and its assigned targets.
+
+    Several of these can be in flight for one login, because /idp/retry
+    deliberately does not stop the original from waiting: a late tap on the
+    first notification should still work. Only the attempt that is still the
+    current one may record a result, or a superseded attempt timing out
+    minutes later would overwrite a login that already succeeded and file a
+    timeout against it in the audit log.
+    """
+    pending = _pending.get(request_id)
+    if pending is None:
+        return
+    attempt = pending.get("attempt", 0) + 1
+    pending["attempt"] = attempt
     db = get_db()
     account_id = pending["account_id"]
 
@@ -226,6 +303,17 @@ async def _run_notify_and_wait(request_id: str, targets: list[str]) -> None:
         geo_asn_org=geo.asn_org,
     )
     outcome = await run_approval(targets, request_id, context)
+
+    # While this attempt was waiting, a resend may have started a newer one, or
+    # the login may have finished and been cleaned up. In either case this
+    # result is history and must not be written anywhere.
+    if _pending.get(request_id) is not pending or pending.get("attempt") != attempt:
+        logger.info(
+            "Discarding superseded approval attempt %d for %s (outcome %s)",
+            attempt, request_id, outcome.name,
+        )
+        return
+
     pending["status"] = _OUTCOME_TO_STATUS[outcome]
 
     if outcome == ApprovalOutcome.APPROVED:
@@ -285,7 +373,7 @@ async def submit_email(request_id: str = Form(...), email: str = Form(...)):
         raise HTTPException(status_code=409, detail="email already submitted for this request")
 
     pending["status"] = "resolving"
-    asyncio.create_task(_start_approval(request_id, email))
+    _spawn(_start_approval(request_id, email))
     return {"status": "resolving"}
 
 
@@ -315,7 +403,7 @@ async def retry(request_id: str = Form(...)):
         raise HTTPException(status_code=403, detail="retry not available yet")
 
     targets = await accounts.get_targets(get_db(), pending["email"])
-    asyncio.create_task(_run_notify_and_wait(request_id, targets))
+    _spawn(_run_notify_and_wait(request_id, targets))
     return {"status": "waiting"}
 
 
@@ -333,7 +421,8 @@ async def submit_recovery_code(request: Request, request_id: str = Form(...), co
     ip = _client_ip(request)
     account_id = pending["account_id"]
 
-    if await ip_blocking.is_blocked(db, account_id, ip):
+    # Checked before any hashing, so a refused attempt costs nothing.
+    if _too_many_attempts(account_id, pending) or await ip_blocking.is_blocked(db, account_id, ip):
         # Generic failure — never reveal to the browser that this is a
         # block rather than simply a wrong code.
         raise HTTPException(status_code=401, detail="invalid recovery code")
@@ -370,7 +459,10 @@ async def complete(request_id: str):
     }
     del _pending[request_id]
 
-    qs = f"code={code}&state={pending['state']}"
+    # `state` is whatever the relying party sent us and we hand it straight
+    # back, so it has to be encoded rather than pasted into the query string —
+    # an unencoded `&` or `#` would otherwise reshape the redirect.
+    qs = urlencode({"code": code, "state": pending["state"]})
     return RedirectResponse(url=f"{pending['redirect_uri']}?{qs}", status_code=302)
 
 
@@ -386,7 +478,7 @@ async def fail(request_id: str):
     if pending["status"] not in _FAILURE_STATUSES:
         raise HTTPException(status_code=409, detail="this request hasn't failed (yet)")
 
-    qs = f"error=access_denied&state={pending['state']}"
+    qs = urlencode({"error": "access_denied", "state": pending["state"]})
     redirect_uri = pending["redirect_uri"]
     del _pending[request_id]
     return RedirectResponse(url=f"{redirect_uri}?{qs}", status_code=302)
@@ -422,8 +514,14 @@ async def token(
     if client_id != settings.idp_client_id or client_secret != settings.idp_client_secret:
         raise HTTPException(status_code=401, detail="invalid_client")
 
+    # Popped before the age check, so a stale code is spent either way rather
+    # than left around to be tried again.
     entry = _auth_codes.pop(code, None)
     if entry is None:
+        raise HTTPException(status_code=400, detail="invalid_grant")
+    # The background purge runs on an interval, so it is not what decides
+    # whether a code is still good — this is.
+    if time.time() - entry["issued_at"] > _AUTH_CODE_TTL_SECONDS:
         raise HTTPException(status_code=400, detail="invalid_grant")
 
     id_token = idp_jwt.build_id_token(
@@ -477,12 +575,19 @@ def _purge_expired_state() -> None:
             del _pending[request_id]
 
     for code, entry in list(_auth_codes.items()):
-        if now - entry["issued_at"] > settings.idp_login_timeout_seconds:
+        if now - entry["issued_at"] > _AUTH_CODE_TTL_SECONDS:
             del _auth_codes[code]
 
     for access_token, entry in list(_access_tokens.items()):
         if now - entry["issued_at"] > _ACCESS_TOKEN_TTL_SECONDS:
             del _access_tokens[access_token]
+
+    for account_id, stamps in list(_account_attempts.items()):
+        recent = [s for s in stamps if now - s < _ACCOUNT_ATTEMPT_WINDOW_SECONDS]
+        if recent:
+            _account_attempts[account_id] = recent
+        else:
+            del _account_attempts[account_id]
 
 
 async def _periodic_cleanup_loop() -> None:
