@@ -7,7 +7,7 @@
   <MyIP/>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/Nebur692/ha-login-approval/issues</Support>
+  <Support>https://forums.unraid.net/topic/200264-support-ha-login-approval-nebur692/</Support>
   <Project>https://github.com/Nebur692/ha-login-approval</Project>
   <Overview>Approve or reject sign-ins from a Home Assistant push notification. Truly PASSWORDLESS login, acting as a generic OIDC identity provider compatible with ZITADEL, Keycloak, Authentik, or any standard OIDC-capable relying party. Includes one-time recovery codes, IP blocking after 3 failed attempts, optional GeoIP enrichment, and a full admin panel.&#13;
 &#13;
