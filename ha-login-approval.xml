@@ -13,7 +13,9 @@
 &#13;
 Full step-by-step guide (registering the IDP in ZITADEL/Keycloak/Authentik, the admin panel, every variable): https://github.com/Nebur692/ha-login-approval&#13;
 &#13;
-Admin panel: http://IP:8000/admin</Overview>
+Admin panel: http://IP:8000/admin&#13;
+&#13;
+IMPORTANT if you run this behind a reverse proxy (Nginx Proxy Manager, Traefik, Caddy...): set "Trusted proxies" below to your proxy's address. Until you do, this service uses the address it is connected from, so every notification and audit entry will show the proxy instead of the visitor, and location lookups will be meaningless. Sign-in itself keeps working either way.</Overview>
   <Category>Security:</Category>
   <WebUI>http://[IP]:[PORT:8000]/admin</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Nebur692/ha-login-approval/main/ha-login-approval.xml</TemplateURL>
@@ -43,6 +45,8 @@ Admin panel: http://IP:8000/admin</Overview>
   <Config Name="IDP Client Secret" Target="IDP_CLIENT_SECRET" Default="" Mode="" Description="REQUIRED. A long, random secret you generate yourself, paired with IDP Client ID above — again, it must exactly match what you enter on the identity provider's side when registering this service." Type="Variable" Display="always" Required="true" Mask="true"></Config>
 
   <Config Name="IDP Client Redirect URI" Target="IDP_CLIENT_REDIRECT_URI" Default="" Mode="" Description="REQUIRED. The exact callback URL your identity provider redirects to after a successful login (for ZITADEL, typically https://your-zitadel-domain/idps/callback). Validated on every request — a mismatch is rejected outright, to prevent an open redirect." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+
+  <Config Name="Trusted proxies" Target="TRUSTED_PROXIES" Default="" Mode="" Description="STRONGLY RECOMMENDED if you run this behind a reverse proxy. JSON array of the reverse proxies this service reads X-Forwarded-For / X-Real-IP from, as IPs or CIDRs — for example [&quot;192.168.1.10&quot;] or [&quot;172.18.0.0/16&quot;]. Those headers are how a proxy reports who called it, and they are only trusted when the request actually arrives from an address listed here; otherwise the connecting address is used, so a visitor cannot fake their own IP. Left empty, notifications, the audit log, IP blocking and GeoIP lookups will all show your proxy instead of the visitor." Type="Variable" Display="always" Required="false" Mask="false"></Config>
 
   <Config Name="Approval Timeout Seconds" Target="APPROVAL_TIMEOUT_SECONDS" Default="120" Mode="" Description="How many seconds to wait for an approve/reject tap on the phone before giving up and treating the login as failed." Type="Variable" Display="advanced" Required="false" Mask="false">120</Config>
 
