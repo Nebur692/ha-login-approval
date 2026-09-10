@@ -235,6 +235,17 @@ All under `/admin`, protected by `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
   sets it correctly out of the box; if you're using something else, make sure it forwards
   `X-Forwarded-For` (or `X-Real-IP`) to this container.
 
+- **Home Assistant is down (or hasn't finished booting)**: this service starts anyway and keeps
+  retrying in the background, so it comes back on its own the moment Home Assistant answers —
+  no restart needed. Sign-ins can't be approved meanwhile, of course. `GET /health` says which
+  of the two is actually down: `"ha": "unreachable"` means Home Assistant, not this container.
+- **Is this container itself healthy?**: it ships a Docker `HEALTHCHECK` that asks its own port,
+  so `docker ps` shows `healthy`/`unhealthy` without you having to look. `/health` answers 503
+  only when this service's own database is unreachable — Home Assistant being away reports
+  `degraded` in the body but keeps a 200, so an outage next door doesn't paint this container red.
+  Note that Docker does not restart an unhealthy container by itself: the healthcheck is there to
+  make the problem visible to you and to your monitoring.
+
 ### 💙 Support
 
 None of this would be possible without the community's support. If this project has been useful to
@@ -485,6 +496,19 @@ Todo bajo `/admin`, protegido por `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
   los 3 fallos se compartiera entre todos los visitantes reales. Nginx Proxy Manager la manda bien
   de fábrica; si usas otra cosa, asegúrate de que reenvía `X-Forwarded-For` (o `X-Real-IP`) a este
   contenedor.
+
+- **Home Assistant está caído (o aún no ha terminado de arrancar)**: este servicio arranca igual y
+  sigue reintentando por su cuenta, así que vuelve solo en cuanto Home Assistant responda — no hay
+  que reiniciar nada. Mientras tanto no se pueden aprobar inicios de sesión, claro. `GET /health`
+  dice cuál de los dos está caído de verdad: `"ha": "unreachable"` es Home Assistant, no este
+  contenedor.
+- **¿Está sano este contenedor?**: trae un `HEALTHCHECK` de Docker que pregunta a su propio puerto,
+  así que `docker ps` muestra `healthy`/`unhealthy` sin que tengas que mirar nada. `/health`
+  responde 503 solo cuando la base de datos propia de este servicio no está disponible — que Home
+  Assistant falte se informa como `degraded` en el cuerpo pero sigue devolviendo 200, para que una
+  caída del vecino no pinte de rojo este contenedor. Ojo: Docker no reinicia por sí solo un
+  contenedor `unhealthy`; el healthcheck está para que el problema se vea, a ti y a tu
+  monitorización.
 
 ### 💙 Apoya el proyecto
 
