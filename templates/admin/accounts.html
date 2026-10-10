@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "admin/_burburito.html" import error_box %}
 {% block title %}Accounts{% endblock %}
 {% block content %}
 <h1>Passwordless accounts</h1>
@@ -7,8 +8,7 @@
    passwordless login.</p>
 
 {% if not ha_reachable %}
-<p class="warn">Home Assistant isn't answering, so its devices can't be listed. The accounts are shown
-   as they are, and can be edited again once it answers.</p>
+{{ error_box("Home Assistant isn't answering, so its devices can't be listed. The accounts are shown as they are, and can be edited again once it answers.", burburito) }}
 
 {% for row in rows %}
 <div class="card">

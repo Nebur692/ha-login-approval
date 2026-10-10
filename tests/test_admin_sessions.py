@@ -194,3 +194,25 @@ async def test_ending_another_session_from_the_activity_page(client, ready, monk
         resp = await client.post("/admin/activity/end-session", data={"token_hash": mine, "csrf_token": csrf}, follow_redirects=False)
         assert resp.headers["location"] == "/admin/login"
         assert (await client.get("/admin", follow_redirects=False)).status_code == 303
+
+
+async def test_sign_in_errors_end_with_their_burburito_code(client, ready, monkeypatch):
+    wrong = await client.post("/admin/login", data={**GOOD, "password": "nope-nope-nope"})
+    assert "Burburito code: <code>003-001-001-041</code>" in wrong.text
+    assert "You DO need to do something." in wrong.text
+    for _ in range(admin_sessions.FAILURES_PER_ADDRESS):
+        await client.post("/admin/login", data={**GOOD, "password": "nope-nope-nope"})
+    locked = await client.post("/admin/login", data=GOOD)
+    assert "003-001-001-141" in locked.text and "You do NOT need to do anything." in locked.text
+    monkeypatch.setattr(settings, "admin_password", "short")
+    assert "003-001-001-101" in (await client.get("/admin/login")).text
+
+
+async def test_refused_changes_are_a_page_with_their_code_not_json(client, ready, monkeypatch):
+    stranger = await client.post("/admin/accounts/save", data={"email": "x@example.com"})
+    assert stranger.status_code == 403 and stranger.headers["content-type"].startswith("text/html")
+    assert "003-001-007-044" in stranger.text and 'href="/admin/login"' in stranger.text
+    await sign_in(client, monkeypatch)
+    forged = await client.post("/admin/accounts/save", data={"email": "x@example.com", "csrf_token": "old"})
+    assert forged.status_code == 403
+    assert "003-001-007-046" in forged.text and "Nothing was changed" in forged.text

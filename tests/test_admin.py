@@ -1,3 +1,4 @@
+import html
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -198,7 +199,8 @@ async def test_accounts_page_still_shows_accounts_when_home_assistant_is_down(cl
         page = await client.get("/admin/accounts")
 
     assert page.status_code == 200
-    assert "Home Assistant isn't answering" in page.text
+    assert "Home Assistant isn't answering" in html.unescape(page.text)
+    assert "003-001-020-020" in page.text
     assert "alice@example.com" in page.text and "bob@example.com" in page.text
     assert "mobile_app_alice" in page.text and "mobile_app_tablet" in page.text
     assert "No device assigned." in page.text
@@ -210,7 +212,7 @@ async def test_accounts_page_with_home_assistant_up_has_no_warning(client, admin
     with patch("app.routers.admin.accounts.ha_client.get_notify_targets", AsyncMock(return_value=["mobile_app_x"])):
         page = await client.get("/admin/accounts")
     assert page.status_code == 200
-    assert "Home Assistant isn't answering" not in page.text
+    assert "Home Assistant isn't answering" not in html.unescape(page.text)
     assert "/admin/accounts/save" in page.text
 
 

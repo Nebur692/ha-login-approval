@@ -1,17 +1,14 @@
 {% extends "admin/base.html" %}
+{% from "admin/_burburito.html" import error_box %}
 {% block title %}Sign in{% endblock %}
 {% block content %}
 <h1>Admin panel</h1>
 
 {% if password_problem %}
-<div class="card">
-  <p class="warn">The admin panel is turned off: {{ password_problem }}</p>
-  <p>Set <code>ADMIN_PASSWORD</code> to something at least 12 characters long and restart the
-     container. Sign-ins through this service keep working meanwhile — only this panel is off.</p>
-</div>
+{{ error_box("The admin panel is turned off: " ~ password_problem ~ " Set ADMIN_PASSWORD to something at least 12 characters long and recreate the container. Sign-ins through this service keep working meanwhile — only this panel is off.", burburito) }}
 {% else %}
+{% if error %}{{ error_box(error, burburito) }}{% endif %}
 <div class="card narrow">
-  {% if error %}<p class="warn">{{ error }}</p>{% endif %}
   <form method="post" action="/admin/login">
     <input type="hidden" name="next" value="{{ next }}">
     <label class="field">Username

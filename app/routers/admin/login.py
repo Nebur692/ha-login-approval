@@ -5,7 +5,7 @@ import time
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
-from app import admin_sessions, client_ip
+from app import admin_sessions, burburito, client_ip
 from app.routers.admin._auth import cookie_name, require_admin, secure_cookies
 from app.routers.admin._templates import templates
 
@@ -24,11 +24,15 @@ def _safe_next(next_path: str) -> str:
     return "/admin"
 
 
-def _login_page(request: Request, next_path: str, error: str | None, status_code: int = 200):
+def _login_page(request: Request, next_path: str, error: str | None, status_code: int = 200, key: str | None = None):
+    weak = admin_sessions.password_problem()
+    if weak:
+        key = "panel/iniciar-sesion/config-invalida"
     return templates.TemplateResponse(request, "admin/login.html", {
         "next": _safe_next(next_path),
         "error": error,
-        "password_problem": admin_sessions.password_problem(),
+        "password_problem": weak,
+        "burburito": burburito.footer(key) if key else None,
     }, status_code=status_code)
 
 
@@ -52,10 +56,16 @@ async def login(
             return _login_page(request, next, None, status_code=403)
         if await admin_sessions.too_many_failures(ip):
             await admin_sessions.record(admin_sessions.LOGIN_REFUSED, username=username, ip=ip, detail="too many failures")
-            return _login_page(request, next, "Too many failed attempts. Try again in 15 minutes.", status_code=429)
+            return _login_page(
+                request, next, "Too many failed attempts. Try again in 15 minutes.", status_code=429,
+                key="panel/iniciar-sesion/limite-propio",
+            )
         if not admin_sessions.credentials_match(username, password):
             await admin_sessions.record(admin_sessions.LOGIN_FAILED, username=username, ip=ip)
-            return _login_page(request, next, "Wrong username or password.", status_code=401)
+            return _login_page(
+                request, next, "Wrong username or password.", status_code=401,
+                key="panel/iniciar-sesion/credencial-invalida",
+            )
 
         token = await admin_sessions.create(username, ip, request.headers.get("user-agent", ""))
         await admin_sessions.record(admin_sessions.LOGIN_OK, username=username, ip=ip)

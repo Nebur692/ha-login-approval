@@ -15,6 +15,17 @@ from app.config import settings
 _SAFE_METHODS = {"GET", "HEAD"}
 
 
+class AdminRefused(Exception):
+    """A change refused before it happened — shown as a page with its
+    burburito code (see main.py), not as a bare JSON error."""
+
+    def __init__(self, key: str, message: str, *, signed_in: bool):
+        super().__init__(message)
+        self.key = key
+        self.message = message
+        self.signed_in = signed_in
+
+
 def cookie_name() -> str:
     # The __Host- prefix makes the browser refuse the cookie unless it is
     # Secure, host-only and Path=/ — so it cannot be planted from a sibling
@@ -34,13 +45,21 @@ async def require_admin(request: Request) -> str:
                 status_code=303,
                 headers={"Location": f"/admin/login?next={quote(request.url.path)}"},
             )
-        raise HTTPException(status_code=403, detail="Not signed in")
+        raise AdminRefused(
+            "panel/cambiar-ajustes/sesion-cerrada",
+            "Your session had ended (30 minutes without use, 8 hours since signing in, or signed out from Activity), so this change was not saved.",
+            signed_in=False,
+        )
 
     if request.method not in _SAFE_METHODS:
         form = await request.form()
         sent = form.get("csrf_token")
         if not isinstance(sent, str) or not secrets.compare_digest(sent, session["csrf_token"]):
-            raise HTTPException(status_code=403, detail="Missing or wrong CSRF token")
+            raise AdminRefused(
+                "panel/cambiar-ajustes/no-autorizado",
+                "This form did not carry your session's security token — usually a page left open from before you signed in again — so the change was not saved.",
+                signed_in=True,
+            )
 
     request.state.admin_user = session["username"]
     request.state.csrf_token = session["csrf_token"]

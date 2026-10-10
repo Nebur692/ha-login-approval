@@ -1,0 +1,8 @@
+{% extends "admin/base.html" %}
+{% from "admin/_burburito.html" import error_box %}
+{% block title %}Not saved{% endblock %}
+{% block content %}
+<h1>Nothing was changed</h1>
+{{ error_box(message, burburito) }}
+<p><a href="{{ back }}">{{ back_label }}</a></p>
+{% endblock %}

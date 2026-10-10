@@ -15,6 +15,8 @@ from fastapi.responses import JSONResponse
 from app import admin_sessions, db, geoip_updater, ha_client, idp_jwt
 from app.security_headers import SecurityHeadersMiddleware
 from app.routers import admin, idp
+from app.routers.admin._auth import AdminRefused
+from app.routers.admin._templates import templates as admin_templates
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -68,6 +70,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="ha-login-approval", lifespan=lifespan, docs_url=None, redoc_url=None)
 app.add_middleware(SecurityHeadersMiddleware)
+
+
+@app.exception_handler(AdminRefused)
+async def admin_refused(request, exc: AdminRefused):
+    # A page, not JSON: whoever submitted the form is a person, and the
+    # burburito code at the bottom is what they pass on if it keeps happening.
+    from app import burburito
+    return admin_templates.TemplateResponse(request, "admin/refused.html", {
+        "message": exc.message,
+        "burburito": burburito.footer(exc.key),
+        "back": "/admin" if exc.signed_in else "/admin/login",
+        "back_label": "Back to the panel" if exc.signed_in else "Sign in again",
+    }, status_code=403)
 app.include_router(admin.router)
 app.include_router(idp.router)
 

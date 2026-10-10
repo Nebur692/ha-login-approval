@@ -1,0 +1,86 @@
+{
+  "proyecto": {
+    "id": 3,
+    "slug": "ha-login-approval",
+    "nombre": "SSO passwordless con aprobación desde HA",
+    "repo": "https://github.com/Nebur692/ha-login-approval",
+    "fuente": "github.com/Nebur692/ha-login-approval: app/burburito.json (sin copia fija en el NAS)"
+  },
+  "modulos": [
+    {
+      "id": 1,
+      "slug": "panel",
+      "nombre": "El panel de administración",
+      "descripcion": "Todo lo que hay bajo /admin: la página de acceso (app/routers/admin/login.py), la sesión y su token CSRF (app/routers/admin/_auth.py, app/admin_sessions.py) y las páginas que leen de Home Assistant."
+    }
+  ],
+  "acciones": [],
+  "codigos": [
+    {
+      "modulo": "panel",
+      "accion": "iniciar-sesion",
+      "causa": "credencial-invalida",
+      "severidad": "aviso",
+      "actuar": true,
+      "titulo": "Usuario o contraseña del panel incorrectos",
+      "explicacion": "Lo escrito no coincide con ADMIN_USERNAME y ADMIN_PASSWORD. Cada fallo cuenta para el límite de 5 por dirección en 15 minutos y queda en Activity.",
+      "que_hacer": "Volver a escribirlos. Si no se recuerdan, están en la plantilla del contenedor (ADMIN_USERNAME, ADMIN_PASSWORD).",
+      "origen": "app/routers/admin/login.py"
+    },
+    {
+      "modulo": "panel",
+      "accion": "iniciar-sesion",
+      "causa": "limite-propio",
+      "severidad": "aviso",
+      "actuar": false,
+      "titulo": "Demasiados intentos fallidos: acceso al panel en pausa",
+      "explicacion": "5 contraseñas erróneas desde esa dirección, o 50 en total, en 15 minutos. Mientras dure, se rechaza incluso la contraseña buena.",
+      "que_hacer": "Esperar 15 minutos. Al entrar, mirar en Activity de dónde vinieron los fallos.",
+      "origen": "app/admin_sessions.py too_many_failures"
+    },
+    {
+      "modulo": "panel",
+      "accion": "iniciar-sesion",
+      "causa": "config-invalida",
+      "severidad": "error",
+      "actuar": true,
+      "titulo": "El panel está apagado: la contraseña de administración es débil",
+      "explicacion": "ADMIN_PASSWORD tiene menos de 12 caracteres o es una de las conocidas. El panel no deja entrar a nadie; los inicios de sesión de la gente siguen funcionando.",
+      "que_hacer": "Poner en ADMIN_PASSWORD una de 12 caracteres o más y recrear el contenedor.",
+      "origen": "app/admin_sessions.py password_problem"
+    },
+    {
+      "modulo": "panel",
+      "accion": "cambiar-ajustes",
+      "causa": "sesion-cerrada",
+      "severidad": "aviso",
+      "actuar": true,
+      "titulo": "La sesión del panel había terminado al guardar",
+      "explicacion": "Se envió un formulario sin sesión viva: pasaron 30 minutos sin uso, 8 horas desde la entrada, o alguien la cerró desde Activity. El cambio no se ha hecho.",
+      "que_hacer": "Volver a entrar y repetir el cambio.",
+      "origen": "app/routers/admin/_auth.py"
+    },
+    {
+      "modulo": "panel",
+      "accion": "cambiar-ajustes",
+      "causa": "no-autorizado",
+      "severidad": "aviso",
+      "actuar": true,
+      "titulo": "El formulario no traía el token de su sesión",
+      "explicacion": "La sesión está viva pero el formulario no llevaba su token CSRF, o llevaba el de otra sesión: una página antigua abierta desde antes de volver a entrar, o un envío que no salió del propio panel. El cambio no se ha hecho.",
+      "que_hacer": "Recargar la página del panel y repetir el cambio.",
+      "origen": "app/routers/admin/_auth.py"
+    },
+    {
+      "modulo": "panel",
+      "accion": "ver-pantalla",
+      "causa": "error-remoto",
+      "severidad": "aviso",
+      "actuar": false,
+      "titulo": "Home Assistant no responde: las cuentas se ven en solo lectura",
+      "explicacion": "La página Accounts necesita la lista de móviles de Home Assistant para poder editar. Sin ella enseña las cuentas tal cual y sin botones, para no guardar ninguna sin móviles.",
+      "que_hacer": "Nada: en cuanto Home Assistant responda, la página vuelve a ser editable.",
+      "origen": "app/routers/admin/accounts.py"
+    }
+  ]
+}

@@ -8,7 +8,7 @@ import logging
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
-from app import accounts, admin_sessions, client_ip, ha_client
+from app import accounts, admin_sessions, burburito, client_ip, ha_client
 from app.db import get_db
 from app.routers.admin._auth import require_admin
 
@@ -37,6 +37,7 @@ async def accounts_page(request: Request, _: str = Depends(require_admin)):
         "active": "accounts",
         "mobile_targets": mobile_targets,
         "ha_reachable": ha_reachable,
+        "burburito": None if ha_reachable else burburito.footer("panel/ver-pantalla/error-remoto"),
         "rows": rows,
     })
 
