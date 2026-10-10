@@ -21,6 +21,7 @@
   <p>A new key starts signing straight away. The current one keeps verifying for
      {{ overlap_minutes }} minutes, then is deleted.</p>
   <form method="post" action="/admin/signing-key/rotate">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
     <label class="target-label">
       <input type="checkbox" name="discard_old" value="yes">
       Delete the current key now instead — if it may have leaked. A login completing at that

@@ -30,9 +30,9 @@ IMPORTANT if you run this behind a reverse proxy (Nginx Proxy Manager, Traefik, 
 
   <Config Name="HA Token" Target="HA_TOKEN" Default="" Mode="" Description="REQUIRED. A Home Assistant long-lived access token (Profile -> Security -> Long-Lived Access Tokens, at the bottom of the page). Needs permission to call notify.* services and to read mobile_app_notification_action events over the WebSocket." Type="Variable" Display="always" Required="true" Mask="true"></Config>
 
-  <Config Name="Admin Username" Target="ADMIN_USERNAME" Default="admin" Mode="" Description="Username for this container's own /admin panel. Plain HTTP Basic auth — this is a small internal tool, not a full user/session system." Type="Variable" Display="always" Required="false" Mask="false">admin</Config>
+  <Config Name="Admin Username" Target="ADMIN_USERNAME" Default="admin" Mode="" Description="Username for this container's own /admin panel, entered on its sign-in page." Type="Variable" Display="always" Required="false" Mask="false">admin</Config>
 
-  <Config Name="Admin Password" Target="ADMIN_PASSWORD" Default="" Mode="" Description="REQUIRED. Password for the /admin panel, paired with Admin Username above." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Admin Password" Target="ADMIN_PASSWORD" Default="" Mode="" Description="REQUIRED. Password for the /admin panel, paired with Admin Username above. At least 12 characters and not a default one, or the panel stays off (sign-ins are not affected)." Type="Variable" Display="always" Required="true" Mask="true"></Config>
 
   <Config Name="Web/API Port" Target="8000" Default="8000" Mode="tcp" Description="Internal port. Used for the /admin panel and as the base for the identity provider's own URLs (authorize/token/jwks, built from IDP Issuer URL below)." Type="Port" Display="always" Required="true" Mask="false">8000</Config>
 

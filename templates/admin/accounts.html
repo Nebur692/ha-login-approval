@@ -31,6 +31,7 @@
 <div class="card">
   <h2>Add account</h2>
   <form method="post" action="/admin/accounts/save">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
     <input type="email" name="email" placeholder="person@example.com" required class="full-width">
     {% for target in mobile_targets %}
     <label class="target-label">
@@ -46,6 +47,7 @@
 <div class="card">
   <h2>{{ row.email }}</h2>
   <form method="post" action="/admin/accounts/save">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
     <input type="hidden" name="email" value="{{ row.email }}">
     {% for target in mobile_targets %}
     <label class="target-label">

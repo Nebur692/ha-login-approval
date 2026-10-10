@@ -1,0 +1,45 @@
+{% extends "admin/base.html" %}
+{% block title %}Activity{% endblock %}
+{% block content %}
+<h1>Admin activity</h1>
+
+<div class="card">
+  <h2>Signed in now</h2>
+  <table>
+    <tr><th>User</th><th>Since</th><th>Last seen</th><th>From</th><th></th></tr>
+    {% for s in sessions %}
+    <tr>
+      <td>{{ s.username }}{% if s.token_hash == request.state.session_hash %} <span class="muted">(this one)</span>{% endif %}</td>
+      <td>{{ s.created_at | local_datetime }}</td>
+      <td>{{ s.last_seen_at | local_datetime }}</td>
+      <td>{{ s.ip }}<br><span class="muted">{{ s.user_agent }}</span></td>
+      <td>
+        <form method="post" action="/admin/activity/end-session" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="token_hash" value="{{ s.token_hash }}">
+          <button type="submit">Sign out</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<h2>Last {{ events | length }} events</h2>
+{% if not events %}
+  <p class="empty">Nothing recorded yet.</p>
+{% else %}
+<table>
+  <tr><th>When</th><th>Event</th><th>User</th><th>From</th><th>Detail</th></tr>
+  {% for e in events %}
+  <tr>
+    <td>{{ e.at | local_datetime }}</td>
+    <td class="{% if e.event in ('login_failed', 'login_refused') %}warn{% endif %}">{{ e.event }}</td>
+    <td>{{ e.username }}</td>
+    <td>{{ e.ip }}</td>
+    <td>{{ e.detail }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

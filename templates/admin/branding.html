@@ -6,6 +6,7 @@
 favicon are converted to PNG, background to JPEG, each resized down to a sane maximum.</p>
 
 <form method="post" action="/admin/branding/save" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
   <label>Title<br><input type="text" name="title" value="{{ branding.title or '' }}"></label><br><br>
   <label>Logo<br><input type="file" name="logo" accept="image/*"></label>
   {% if branding.logo_path %}<p class="muted">Current: <img src="/branding/logo" alt="" class="thumb"></p>{% endif %}

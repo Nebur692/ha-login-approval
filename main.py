@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from app import db, geoip_updater, ha_client, idp_jwt
+from app import admin_sessions, db, geoip_updater, ha_client, idp_jwt
 from app.security_headers import SecurityHeadersMiddleware
 from app.routers import admin, idp
 
@@ -25,6 +25,8 @@ async def lifespan(app: FastAPI):
     ha_client.init_client()
     await db.init_db()
     await idp_jwt.ensure_signing_key()
+    if problem := admin_sessions.password_problem():
+        logger.warning("Admin panel turned off: %s Sign-ins are not affected.", problem)
     await geoip_updater.start_periodic_updater()
     await idp.start_periodic_cleanup()
 

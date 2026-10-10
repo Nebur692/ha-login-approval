@@ -5,7 +5,7 @@ import pytest
 
 from app import db, idp_jwt
 from app.config import settings
-AUTH = {"Authorization": "Basic YWRtaW46dGVzdC1hZG1pbi1wYXNzd29yZA=="}  # admin:test-admin-password
+from tests.conftest import sign_in
 CLIENT_ID = "test-rp"
 REDIRECT_URI = "https://rp.test/idps/callback"
 
@@ -52,8 +52,9 @@ async def test_each_response_gets_a_fresh_nonce(client, idp_ready):
 
 
 @pytest.mark.parametrize("path", ["/admin", "/admin/audit", "/admin/signing-key"])
-async def test_admin_pages_carry_the_nonce(client, idp_ready, path):
-    resp = await client.get(path, headers=AUTH)
+async def test_admin_pages_carry_the_nonce(client, idp_ready, path, monkeypatch):
+    await sign_in(client, monkeypatch)
+    resp = await client.get(path)
     assert resp.status_code == 200
     nonce = _nonce(resp)
     for name, attrs in re.findall(r"<(script|style)\b([^>]*)>", resp.text):

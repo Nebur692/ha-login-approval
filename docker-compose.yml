@@ -10,7 +10,7 @@ services:
       - HA_BASE_URL=http://homeassistant.local:8123
       - HA_TOKEN=your_long_lived_ha_token_here
       - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=changeme
+      - ADMIN_PASSWORD=change_this_to_12_or_more_characters
       # The service runs as this user and group, never root (Unraid: 99 / 100)
       - PUID=1000
       - PGID=1000

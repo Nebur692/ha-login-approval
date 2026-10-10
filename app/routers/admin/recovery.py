@@ -5,7 +5,7 @@ generating a new batch silently invalidates every code from the previous
 one (recovery_codes.py)."""
 from fastapi import APIRouter, Depends, Form, Request
 
-from app import accounts, recovery_codes
+from app import accounts, admin_sessions, client_ip, recovery_codes
 from app.db import get_db
 from app.routers.admin._auth import require_admin
 
@@ -36,6 +36,9 @@ async def recovery_page(request: Request, _: str = Depends(require_admin)):
 async def generate_codes(request: Request, email: str = Form(...), admin_user: str = Depends(require_admin)):
     account_id = email.strip().lower()
     codes = await recovery_codes.generate_batch(get_db(), account_id, generated_by=admin_user)
+    await admin_sessions.record(
+        "recovery_codes_generated", username=admin_user, ip=client_ip.resolve(request), detail=account_id,
+    )
 
     return templates.TemplateResponse(request, "admin/recovery.html", {
         "active": "recovery",

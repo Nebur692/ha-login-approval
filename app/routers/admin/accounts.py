@@ -8,7 +8,7 @@ import logging
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
-from app import accounts, ha_client
+from app import accounts, admin_sessions, client_ip, ha_client
 from app.db import get_db
 from app.routers.admin._auth import require_admin
 
@@ -43,9 +43,14 @@ async def accounts_page(request: Request, _: str = Depends(require_admin)):
 
 @router.post("/admin/accounts/save")
 async def save_account(
+    request: Request,
     email: str = Form(...),
     targets: list[str] = Form(default=[]),
-    _: str = Depends(require_admin),
+    admin_user: str = Depends(require_admin),
 ):
     await accounts.set_targets(get_db(), email, targets)
+    await admin_sessions.record(
+        "account_saved", username=admin_user, ip=client_ip.resolve(request),
+        detail=f"{email.strip().lower()}: {', '.join(targets) or 'no devices'}",
+    )
     return RedirectResponse(url="/admin/accounts", status_code=303)

@@ -14,7 +14,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 
-from app import image_utils
+from app import admin_sessions, client_ip, image_utils
 from app.branding import get_branding
 from app.config import settings
 from app.db import get_db
@@ -52,11 +52,12 @@ async def branding_page(request: Request, _: str = Depends(require_admin)):
 
 @router.post("/admin/branding/save")
 async def save_branding(
+    request: Request,
     title: str = Form(""),
     logo: UploadFile | None = None,
     background: UploadFile | None = None,
     favicon: UploadFile | None = None,
-    _: str = Depends(require_admin),
+    admin_user: str = Depends(require_admin),
 ):
     db = get_db()
     logo_path = await _save_asset(logo, "logo")
@@ -81,4 +82,9 @@ async def save_branding(
             (title, logo_path, background_path, favicon_path, now),
         )
     await db.commit()
+    changed = [name for name, path in (("logo", logo_path), ("background", background_path), ("favicon", favicon_path)) if path]
+    await admin_sessions.record(
+        "branding_saved", username=admin_user, ip=client_ip.resolve(request),
+        detail=f"title {title!r}" + (f", new {', '.join(changed)}" if changed else ""),
+    )
     return RedirectResponse(url="/admin/branding", status_code=303)

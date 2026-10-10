@@ -24,9 +24,13 @@
     form.inline { margin: 0; }
     img.thumb { max-height: 48px; vertical-align: middle; }
     img.thumb.small { max-height: 32px; }
+    form.logout { display: inline; float: right; }
+    .narrow { max-width: 360px; }
+    label.field { display: block; margin-bottom: 0.75rem; }
   </style>
 </head>
 <body>
+  {% if request.state.admin_user %}
   <nav>
     <a href="/admin" class="{% if active == 'home' %}active{% endif %}">Home</a>
     <a href="/admin/accounts" class="{% if active == 'accounts' %}active{% endif %}">Accounts</a>
@@ -35,7 +39,13 @@
     <a href="/admin/blocked-ips" class="{% if active == 'blocked_ips' %}active{% endif %}">Blocked IPs</a>
     <a href="/admin/branding" class="{% if active == 'branding' %}active{% endif %}">Branding</a>
     <a href="/admin/signing-key" class="{% if active == 'signing_key' %}active{% endif %}">Signing key</a>
+    <a href="/admin/activity" class="{% if active == 'activity' %}active{% endif %}">Activity</a>
+    <form method="post" action="/admin/logout" class="inline logout">
+      <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+      <button type="submit">Sign out ({{ request.state.admin_user }})</button>
+    </form>
   </nav>
+  {% endif %}
   {% block content %}{% endblock %}
   {% block scripts %}{% endblock %}
 </body>

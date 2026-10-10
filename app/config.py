@@ -9,7 +9,8 @@ class Settings(BaseSettings):
     ha_base_url: str
     ha_token: str
 
-    # Admin panel (HTTP Basic Auth — small internal tool, few users)
+    # Admin panel sign-in (sessions: app/admin_sessions.py). A password shorter
+    # than 12 characters or a well-known one turns the panel off.
     admin_username: str = "admin"
     admin_password: str
 

@@ -66,7 +66,7 @@ variables:
 |---|---|
 | `HA_BASE_URL` | Your Home Assistant's internal URL, no trailing slash (e.g. `http://192.168.1.50:8123`). |
 | `HA_TOKEN` | A Home Assistant [long-lived access token](https://developers.home-assistant.io/docs/auth_api/#long-lived-access-token) (Profile → Security → Long-Lived Access Tokens). Needs permission to call `notify.*` services and to read `mobile_app_notification_action` events over the WebSocket. |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Login for this project's own `/admin` panel (HTTP Basic — a small internal tool, not worth a full session system). |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Sign-in for this project's own `/admin` panel. **The password must be at least 12 characters** and not a default one; otherwise the panel stays off (sign-ins through this service are unaffected). |
 
 **OIDC provider (all required):**
 
@@ -186,7 +186,7 @@ didn't is very welcome.
 
 ### 🧑‍💻 Admin panel tour
 
-All under `/admin`, protected by `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
+All under `/admin`. You sign in with `ADMIN_USERNAME`/`ADMIN_PASSWORD` on a sign-in page; the session ends after 30 minutes without use or 8 hours after signing in, and **Sign out** ends it at once. Five wrong passwords from one address lock that address out for 15 minutes.
 
 | Section | What it's for |
 |---|---|
@@ -197,6 +197,7 @@ All under `/admin`, protected by `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
 | **Blocked IPs** | See who's currently blocked and unblock manually — important if three accidental rejects (or mistyped codes) lock out the real account owner. |
 | **Branding** | Upload a logo/background/favicon and set a title for the bridge page. Any image format or size is accepted — each is automatically converted and resized (logo/favicon to PNG, background to JPEG). |
 | **Signing key** | The key that signs every login. **Rotate** makes a new one sign from that moment, while the old one keeps verifying for an hour so nothing in flight breaks; tick the box to delete the old one at once instead, if it may have leaked. Relying parties pick up the new key on their own. |
+| **Activity** | Who is signed in to the panel right now (and a button to sign any of them out), and the last 200 sign-ins — good and bad — and changes made in the panel, with who, when and from where. |
 
 ### 🧭 Usage — what it looks like for the person logging in
 
@@ -246,6 +247,10 @@ All under `/admin`, protected by `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
   retrying in the background, so it comes back on its own the moment Home Assistant answers —
   no restart needed. Sign-ins can't be approved meanwhile, of course. `GET /health` says which
   of the two is actually down: `"ha": "unreachable"` means Home Assistant, not this container.
+- **The admin panel says it is turned off**: `ADMIN_PASSWORD` is shorter than 12 characters or a
+  default one. Set a longer one and restart the container.
+- **"Too many failed attempts"** on the panel's sign-in page: five wrong passwords from your address
+  in 15 minutes. Wait 15 minutes; the attempts are listed under **Activity** once you are in.
 - **Is this container itself healthy?**: it ships a Docker `HEALTHCHECK` that asks its own port,
   so `docker ps` shows `healthy`/`unhealthy` without you having to look. `/health` answers 503
   only when this service's own database is unreachable — Home Assistant being away reports
@@ -326,7 +331,7 @@ entorno:
 |---|---|
 | `HA_BASE_URL` | La URL interna de tu Home Assistant, sin barra final (ej. `http://192.168.1.50:8123`). |
 | `HA_TOKEN` | Un [token de acceso de larga duración](https://developers.home-assistant.io/docs/auth_api/#long-lived-access-token) de Home Assistant (Perfil → Seguridad → Tokens de acceso de larga duración). Necesita permiso para llamar servicios `notify.*` y para leer eventos `mobile_app_notification_action` por WebSocket. |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Acceso al propio panel `/admin` (HTTP Basic — herramienta interna pequeña, no compensa un sistema de sesiones completo). |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Acceso al propio panel `/admin`. **La contraseña debe tener al menos 12 caracteres** y no ser una de las conocidas; si no, el panel queda apagado (los inicios de sesión a través de este servicio no se ven afectados). |
 
 **Proveedor OIDC (todas requeridas):**
 
@@ -450,7 +455,7 @@ bienvenido.
 
 ### 🧑‍💻 Recorrido por el panel de administración
 
-Todo bajo `/admin`, protegido por `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
+Todo bajo `/admin`. Se entra con `ADMIN_USERNAME`/`ADMIN_PASSWORD` en una página de acceso; la sesión termina tras 30 minutos sin uso u 8 horas después de entrar, y **Sign out** la cierra al momento. Cinco contraseñas erróneas desde una dirección la bloquean 15 minutos.
 
 | Sección | Para qué sirve |
 |---|---|
@@ -461,6 +466,7 @@ Todo bajo `/admin`, protegido por `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
 | **Blocked IPs** | Ver quién está bloqueado ahora mismo y desbloquear manualmente — importante si tres rechazos accidentales (o códigos mal tecleados) dejan fuera al dueño real de la cuenta. |
 | **Branding** | Sube un logo/fondo/favicon y pon un título para la página puente. Se acepta cualquier formato o tamaño de imagen — cada una se convierte y redimensiona automáticamente (logo/favicon a PNG, fondo a JPEG). |
 | **Signing key** | La clave que firma cada login. **Rotate** hace que una nueva firme desde ese momento, mientras la anterior sigue sirviendo para verificar durante una hora, para que no se rompa nada en curso; marca la casilla para borrar la anterior al instante, si puede haberse filtrado. Los proveedores recogen la clave nueva solos. |
+| **Activity** | Quién tiene la sesión abierta en el panel ahora mismo (con un botón para cerrar cualquiera), y los últimos 200 accesos — buenos y malos — y cambios hechos en el panel, con quién, cuándo y desde dónde. |
 
 ### 🧭 Uso — cómo lo vive quien inicia sesión
 
@@ -516,6 +522,10 @@ Todo bajo `/admin`, protegido por `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
   que reiniciar nada. Mientras tanto no se pueden aprobar inicios de sesión, claro. `GET /health`
   dice cuál de los dos está caído de verdad: `"ha": "unreachable"` es Home Assistant, no este
   contenedor.
+- **El panel de administración dice que está apagado**: `ADMIN_PASSWORD` tiene menos de 12
+  caracteres o es una de las conocidas. Pon una más larga y reinicia el contenedor.
+- **"Too many failed attempts"** en la página de acceso al panel: cinco contraseñas erróneas desde tu
+  dirección en 15 minutos. Espera 15 minutos; los intentos aparecen en **Activity** al entrar.
 - **¿Está sano este contenedor?**: trae un `HEALTHCHECK` de Docker que pregunta a su propio puerto,
   así que `docker ps` muestra `healthy`/`unhealthy` sin que tengas que mirar nada. `/health`
   responde 503 solo cuando la base de datos propia de este servicio no está disponible — que Home

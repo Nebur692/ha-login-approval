@@ -20,6 +20,7 @@
     <td class="{% if row.remaining <= 3 %}warn{% endif %}">{{ row.remaining }}</td>
     <td>
       <form method="post" action="/admin/recovery/generate" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="email" value="{{ row.email }}">
         <button type="submit">{% if row.remaining %}Regenerate{% else %}Generate{% endif %}</button>
       </form>

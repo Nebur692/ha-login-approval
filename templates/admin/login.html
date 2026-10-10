@@ -1,0 +1,27 @@
+{% extends "admin/base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<h1>Admin panel</h1>
+
+{% if password_problem %}
+<div class="card">
+  <p class="warn">The admin panel is turned off: {{ password_problem }}</p>
+  <p>Set <code>ADMIN_PASSWORD</code> to something at least 12 characters long and restart the
+     container. Sign-ins through this service keep working meanwhile — only this panel is off.</p>
+</div>
+{% else %}
+<div class="card narrow">
+  {% if error %}<p class="warn">{{ error }}</p>{% endif %}
+  <form method="post" action="/admin/login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label class="field">Username
+      <input type="text" name="username" autocomplete="username" required autofocus class="full-width">
+    </label>
+    <label class="field">Password
+      <input type="password" name="password" autocomplete="current-password" required class="full-width">
+    </label>
+    <button type="submit">Sign in</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

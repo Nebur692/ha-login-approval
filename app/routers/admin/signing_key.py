@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
-from app import idp_jwt
+from app import admin_sessions, client_ip, idp_jwt
 from app.routers.admin._auth import require_admin
 
 from app.routers.admin._templates import templates
@@ -24,8 +24,12 @@ async def signing_key_page(request: Request, _: str = Depends(require_admin)):
 
 
 @router.post("/admin/signing-key/rotate")
-async def rotate(discard_old: str | None = Form(None), admin_user: str = Depends(require_admin)):
+async def rotate(request: Request, discard_old: str | None = Form(None), admin_user: str = Depends(require_admin)):
     kid = await idp_jwt.rotate_signing_key(discard_old=discard_old == "yes")
+    await admin_sessions.record(
+        "signing_key_rotated", username=admin_user, ip=client_ip.resolve(request),
+        detail=f"new {kid[:8]}, old {'deleted' if discard_old == 'yes' else 'kept for the overlap'}",
+    )
     logger.warning(
         "Signing key rotated by %s — new kid %s, old key %s",
         admin_user, kid, "discarded" if discard_old == "yes" else "kept for the overlap",

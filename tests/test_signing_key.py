@@ -10,7 +10,7 @@ from jwt import PyJWK
 
 from app import db, idp_jwt
 from app.config import settings
-AUTH = {"Authorization": "Basic YWRtaW46dGVzdC1hZG1pbi1wYXNzd29yZA=="}  # admin:test-admin-password
+from tests.conftest import sign_in
 
 MIGRATION_0001 = Path(__file__).resolve().parent.parent / "app" / "migrations" / "0001_init.sql"
 
@@ -112,20 +112,21 @@ async def test_upgrade_from_a_v2_4_database_keeps_its_key(tmp_path, monkeypatch)
     await db.close_db()
 
 
-async def test_rotate_from_the_admin_panel(client, keys_ready):
+async def test_rotate_from_the_admin_panel(client, keys_ready, monkeypatch):
+    csrf = await sign_in(client, monkeypatch)
     before = (await idp_jwt.list_keys())[0]["kid"]
-    resp = await client.post("/admin/signing-key/rotate", headers=AUTH, follow_redirects=False)
+    resp = await client.post("/admin/signing-key/rotate", data={"csrf_token": csrf}, follow_redirects=False)
     assert resp.status_code == 303
     rows = await idp_jwt.list_keys()
     assert [r["kid"] for r in rows if not r["active"]] == [before]
 
-    resp = await client.post("/admin/signing-key/rotate", headers=AUTH, data={"discard_old": "yes"}, follow_redirects=False)
+    resp = await client.post("/admin/signing-key/rotate", data={"discard_old": "yes", "csrf_token": csrf}, follow_redirects=False)
     assert resp.status_code == 303
     rows = await idp_jwt.list_keys()
     assert len([r for r in rows if r["active"]]) == 1
     assert before in [r["kid"] for r in rows]  # the earlier retired one is untouched by a discard
 
-    page = await client.get("/admin/signing-key", headers=AUTH)
+    page = await client.get("/admin/signing-key")
     assert page.status_code == 200
     assert rows[0]["kid"] in page.text
     assert "PRIVATE KEY" not in page.text
