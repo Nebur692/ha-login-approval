@@ -1177,3 +1177,66 @@ async def test_notification_context_without_an_app(client, idp_ready, monkeypatc
         await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
         await asyncio.sleep(0.05)
     assert run.call_args.args[2].app is None
+
+
+# --- burburito codes on the sign-in page ---------------------------------
+
+@pytest.mark.parametrize("params,code", [
+    ({"client_id": "someone-else"}, "003-002-001-101"),
+    ({"redirect_uri": "https://evil.test/x"}, "003-002-001-101"),
+    ({"response_type": "token"}, "003-002-001-101"),
+    ({"code_challenge": "short", "code_challenge_method": "S256"}, "003-002-001-061"),
+    ({"nonce": "x" * 600}, "003-002-001-061"),
+])
+async def test_a_sign_in_that_cannot_start_is_a_page_with_its_code(client, idp_ready, params, code):
+    resp = await client.get("/authorize", params=_authorize_params(**params), headers={"Accept-Language": "es-ES"})
+    assert resp.status_code == 400
+    assert resp.headers["content-type"].startswith("text/html")
+    assert f"Código burburito: <code>{code}</code>" in resp.text
+    assert "SÍ tienes que hacer algo." in resp.text
+    assert idp_router._pending == {}
+
+
+async def test_the_bridge_page_carries_every_problem_in_the_readers_language(client, idp_ready):
+    import json
+    import re
+
+    resp = await client.get("/authorize", params=_authorize_params(), headers={"Accept-Language": "en-GB"})
+    problems = json.loads(re.search(r"const PROBLEMS = (\{.*?\});\n", resp.text).group(1))
+    assert set(problems) == {"denied", "rejected", "timeout", "send_failed", "expired", "conflict",
+                             "recovery_invalid", "recovery_not_yet", "offline", "bad_client", "bad_request"}
+    assert problems["denied"]["code"] == "003-002-001-046"
+    assert problems["denied"]["label"] == "Burburito code"
+    assert "const AUTO_RETURN_SECONDS = 10;" in resp.text
+
+
+async def test_the_page_script_handles_every_status_the_server_can_report():
+    """The page decides what to show from the status strings; one it does not
+    know about would leave the person waiting forever with no message."""
+    from pathlib import Path
+
+    page = (Path(__file__).resolve().parent.parent / "templates" / "idp_bridge.html").read_text()
+    for status in idp_router._FAILURE_STATUSES:
+        assert f'"{status}"' in page, status
+
+
+async def test_home_assistant_never_reached_since_start_ends_in_send_failed_not_waiting(client, idp_ready, monkeypatch):
+    """The container started while Home Assistant was down, so even its
+    language was never fetched: the approval used to die right there and
+    leave the login 'waiting' for good, telling the person nothing."""
+    import httpx
+
+    from app import ha_client
+
+    monkeypatch.setattr(ha_client, "_language_cache", None)
+    monkeypatch.setattr(ha_client, "get_ha_language", AsyncMock(side_effect=httpx.ConnectError("Name or service not known")))
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+    await asyncio.sleep(0.05)
+
+    status = (await client.get(f"/idp/status/{request_id}")).json()
+    assert status["status"] == "send_failed"
+    assert status["recovery_available"] is True

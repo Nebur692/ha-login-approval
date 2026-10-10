@@ -93,6 +93,9 @@ _MAX_PENDING = 500
 # `nonce` is opaque to us and only ever echoed back inside the id_token, but it
 # is the sender's text, so it gets a ceiling like the user agent does.
 _MAX_NONCE = 512
+# A failed sign-in stays on screen this long, so its message and burburito code
+# can be read, before the page goes back to the relying party on its own.
+_AUTO_RETURN_SECONDS = 10
 # RFC 7636 §4.2: a S256 challenge is the base64url of a SHA-256, always 43
 # characters. Anything else cannot have come from a correct client.
 _PKCE_CHALLENGE = re.compile(r"[A-Za-z0-9_-]{43}")
@@ -186,19 +189,19 @@ async def authorize(
     code_challenge_method: str | None = None,
 ):
     if client_id != settings.idp_client_id or redirect_uri != settings.idp_client_redirect_uri:
-        raise HTTPException(status_code=400, detail="unknown client_id or redirect_uri")
+        return await _bridge_error(request, "bad_client")
     if response_type != "code":
-        raise HTTPException(status_code=400, detail="unsupported_response_type")
+        return await _bridge_error(request, "bad_client")
     if nonce is not None and len(nonce) > _MAX_NONCE:
-        raise HTTPException(status_code=400, detail="invalid_request: nonce too long")
+        return await _bridge_error(request, "bad_request")
     if code_challenge is not None:
         # Only S256. `plain` (also the RFC's default when the method is left
         # out) sends the verifier itself through the browser, which is the very
         # thing PKCE is there to avoid.
         if code_challenge_method != "S256":
-            raise HTTPException(status_code=400, detail="invalid_request: only S256 is supported")
+            return await _bridge_error(request, "bad_request")
         if not _PKCE_CHALLENGE.fullmatch(code_challenge):
-            raise HTTPException(status_code=400, detail="invalid_request: malformed code_challenge")
+            return await _bridge_error(request, "bad_request")
 
     request_id = uuid.uuid4().hex
     while len(_pending) >= _MAX_PENDING:
@@ -230,7 +233,20 @@ async def authorize(
     return templates.TemplateResponse(request, "idp_bridge.html", {
         "request_id": request_id, "lang": lang, "strings": strings, "branding": branding,
         "recovery_delay_seconds": settings.bridge_recovery_unlock_delay_seconds,
+        "problems": messages.bridge_problems(lang),
+        "auto_return_seconds": _AUTO_RETURN_SECONDS,
     })
+
+
+async def _bridge_error(request: Request, name: str):
+    """A sign-in that cannot even start: the person is shown why, in their
+    browser's language and with its burburito code, instead of bare JSON."""
+    lang = messages.detect_browser_lang(request.headers.get("accept-language"))
+    branding = await get_branding(get_db()) or {}
+    return templates.TemplateResponse(request, "idp_error.html", {
+        "lang": lang, "strings": messages.bridge_page_strings(lang), "branding": branding,
+        "problem": messages.bridge_problem(name, lang),
+    }, status_code=400)
 
 
 @router.get("/branding/{kind}")
@@ -333,7 +349,15 @@ async def _run_notify_and_wait(request_id: str, targets: list[str]) -> None:
         geo_country=geo.country,
         geo_asn_org=geo.asn_org,
     )
-    outcome = await run_approval(targets, request_id, context)
+    try:
+        outcome = await run_approval(targets, request_id, context)
+    except Exception:
+        # Whatever broke on the way — Home Assistant never having answered
+        # since this container started is the usual one — nothing reached the
+        # phone. Saying so lets the page offer a recovery code at once; an
+        # exception here would leave the login "waiting" for good instead.
+        logger.exception("Approval for %s failed before any notification was sent", request_id)
+        outcome = ApprovalOutcome.SEND_FAILED
 
     # While this attempt was waiting, a resend may have started a newer one, or
     # the login may have finished and been cleaned up. In either case this

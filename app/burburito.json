@@ -12,6 +12,18 @@
       "slug": "panel",
       "nombre": "El panel de administración",
       "descripcion": "Todo lo que hay bajo /admin: la página de acceso (app/routers/admin/login.py), la sesión y su token CSRF (app/routers/admin/_auth.py, app/admin_sessions.py) y las páginas que leen de Home Assistant."
+    },
+    {
+      "id": 2,
+      "slug": "login",
+      "nombre": "La página de inicio de sesión",
+      "descripcion": "La página puente que ve quien inicia sesión (templates/idp_bridge.html y app/routers/idp.py): pide el correo, espera la aprobación del móvil y ofrece reenviar o un código de recuperación."
+    },
+    {
+      "id": 3,
+      "slug": "aviso",
+      "nombre": "Los avisos al móvil",
+      "descripcion": "Las notificaciones de Home Assistant que no son la petición de aprobación: hoy, los avisos de códigos de recuperación (app/routers/idp.py _maybe_warn_low_recovery_codes, textos en app/messages.py)."
     }
   ],
   "acciones": [],
@@ -81,6 +93,160 @@
       "explicacion": "La página Accounts necesita la lista de móviles de Home Assistant para poder editar. Sin ella enseña las cuentas tal cual y sin botones, para no guardar ninguna sin móviles.",
       "que_hacer": "Nada: en cuanto Home Assistant responda, la página vuelve a ser editable.",
       "origen": "app/routers/admin/accounts.py"
+    },
+    {
+      "modulo": "login",
+      "accion": "iniciar-sesion",
+      "causa": "no-autorizado",
+      "severidad": "aviso",
+      "actuar": true,
+      "titulo": "Esta cuenta no puede entrar así ahora mismo",
+      "explicacion": "Estado denied. O el correo no está en Accounts (o no tiene ningún móvil marcado), o esa dirección está bloqueada para esa cuenta tras 3 fallos. Se dice lo mismo a propósito, para no revelar a un extraño si una cuenta existe. La auditoría del panel distingue «blocked».",
+      "que_hacer": "Mirar en el panel: Accounts (¿está el correo y con móvil?) y Blocked IPs.",
+      "origen": "app/routers/idp.py _start_approval / _run_notify_and_wait"
+    },
+    {
+      "modulo": "login",
+      "accion": "aprobar-acceso",
+      "causa": "cancelado",
+      "severidad": "aviso",
+      "actuar": false,
+      "titulo": "Alguien pulsó Rechazar en el móvil",
+      "explicacion": "Estado rejected: la notificación llegó y se pulsó Rechazar. Cuenta como fallo para el bloqueo por dirección.",
+      "que_hacer": "Si fue un error, volver a empezar desde la app. Si nadie de casa intentaba entrar, mirar la auditoría.",
+      "origen": "app/routers/idp.py _run_notify_and_wait"
+    },
+    {
+      "modulo": "login",
+      "accion": "aprobar-acceso",
+      "causa": "tiempo-agotado",
+      "severidad": "aviso",
+      "actuar": false,
+      "titulo": "Nadie respondió a la notificación a tiempo",
+      "explicacion": "Estado timeout: pasaron APPROVAL_TIMEOUT_SECONDS (120 s por defecto) sin pulsar Aprobar ni Rechazar.",
+      "que_hacer": "Volver a empezar desde la app con el móvil a mano.",
+      "origen": "app/routers/idp.py _run_notify_and_wait"
+    },
+    {
+      "modulo": "login",
+      "accion": "aprobar-acceso",
+      "causa": "error-remoto",
+      "severidad": "error",
+      "actuar": true,
+      "titulo": "Home Assistant no pudo entregar la notificación",
+      "explicacion": "Estado send_failed: falló el envío a todos los móviles de la cuenta (Home Assistant caído, móvil dado de baja en HA o servicio notify desaparecido).",
+      "que_hacer": "En la página, usar un código de recuperación. Después, mirar que Home Assistant responde y que el móvil sigue en Accounts.",
+      "origen": "app/approval_flow.py run_approval"
+    },
+    {
+      "modulo": "login",
+      "accion": "iniciar-sesion",
+      "causa": "codigo-caducado",
+      "severidad": "aviso",
+      "actuar": false,
+      "titulo": "Este intento de inicio de sesión ya no existe",
+      "explicacion": "El request_id no está en memoria: caducó (IDP_LOGIN_TIMEOUT_SECONDS), terminó ya, o el contenedor se reinició entre medias.",
+      "que_hacer": "Volver a la app y empezar de nuevo.",
+      "origen": "app/routers/idp.py (404 unknown or expired request)"
+    },
+    {
+      "modulo": "login",
+      "accion": "iniciar-sesion",
+      "causa": "conflicto-estado",
+      "severidad": "aviso",
+      "actuar": false,
+      "titulo": "Este intento ya iba por otro paso",
+      "explicacion": "Respuesta 409: se envió el correo dos veces, o se pidió algo que el intento ya había pasado (por ejemplo, desde dos pestañas a la vez).",
+      "que_hacer": "Volver a la app y empezar de nuevo en una sola pestaña.",
+      "origen": "app/routers/idp.py (409)"
+    },
+    {
+      "modulo": "login",
+      "accion": "recuperar-acceso",
+      "causa": "credencial-invalida",
+      "severidad": "aviso",
+      "actuar": true,
+      "titulo": "El código de recuperación no vale",
+      "explicacion": "Respuesta 401: el código no es de esta cuenta, ya se usó, o hay demasiados intentos o un bloqueo (se responde igual a propósito, para no revelar un bloqueo).",
+      "que_hacer": "Revisar el código. Si se agotaron, generar otros en el panel (Recovery codes).",
+      "origen": "app/routers/idp.py submit_recovery_code"
+    },
+    {
+      "modulo": "login",
+      "accion": "recuperar-acceso",
+      "causa": "regla-propia",
+      "severidad": "aviso",
+      "actuar": false,
+      "titulo": "Aún no se puede usar un código de recuperación",
+      "explicacion": "Respuesta 403: el código solo se acepta pasado BRIDGE_RECOVERY_UNLOCK_DELAY_SECONDS esperando, o en cuanto falla el envío.",
+      "que_hacer": "Esperar a que la página ofrezca la opción.",
+      "origen": "app/routers/idp.py _recovery_available"
+    },
+    {
+      "modulo": "login",
+      "accion": "iniciar-sesion",
+      "causa": "config-invalida",
+      "severidad": "error",
+      "actuar": true,
+      "titulo": "El proveedor de identidad llama con una configuración que no coincide",
+      "explicacion": "/authorize con un client_id o redirect_uri distinto de IDP_CLIENT_ID / IDP_CLIENT_REDIRECT_URI, o un response_type que no es code.",
+      "que_hacer": "Igualar la configuración del proveedor externo en ZITADEL/Keycloak con las variables IDP_* del contenedor.",
+      "origen": "app/routers/idp.py authorize"
+    },
+    {
+      "modulo": "login",
+      "accion": "iniciar-sesion",
+      "causa": "dato-invalido",
+      "severidad": "error",
+      "actuar": true,
+      "titulo": "La petición de inicio de sesión llega mal formada",
+      "explicacion": "/authorize con un nonce demasiado largo, un PKCE que no es S256 o un code_challenge con mala forma.",
+      "que_hacer": "Revisar los ajustes de PKCE del proveedor externo (S256).",
+      "origen": "app/routers/idp.py authorize"
+    },
+    {
+      "modulo": "login",
+      "accion": "iniciar-sesion",
+      "causa": "sin-conexion",
+      "severidad": "aviso",
+      "actuar": true,
+      "titulo": "La página perdió la conexión con el servidor",
+      "explicacion": "Una petición de la página (fetch) no obtuvo respuesta: sin red en ese momento o el contenedor reiniciándose.",
+      "que_hacer": "Comprobar la conexión y recargar la página.",
+      "origen": "templates/idp_bridge.html"
+    },
+    {
+      "modulo": "aviso",
+      "accion": "recibir-aviso",
+      "causa": "falta-config",
+      "severidad": "aviso",
+      "actuar": true,
+      "titulo": "La cuenta no tiene códigos de recuperación",
+      "explicacion": "Nunca se generó un lote: si la notificación no llega, no habrá forma de entrar.",
+      "que_hacer": "Generarlos en el panel (Recovery codes) y guardarlos.",
+      "origen": "app/messages.py recovery_warning_notification"
+    },
+    {
+      "modulo": "aviso",
+      "accion": "recibir-aviso",
+      "causa": "limite-propio",
+      "severidad": "error",
+      "actuar": true,
+      "titulo": "Se han acabado los códigos de recuperación",
+      "explicacion": "El lote se generó y no queda ninguno sin usar.",
+      "que_hacer": "Generar un lote nuevo en el panel (Recovery codes).",
+      "origen": "app/messages.py recovery_warning_notification"
+    },
+    {
+      "modulo": "aviso",
+      "accion": "recibir-aviso",
+      "causa": "regla-propia",
+      "severidad": "aviso",
+      "actuar": true,
+      "titulo": "Quedan pocos códigos de recuperación",
+      "explicacion": "Quedan RECOVERY_CODE_LOW_WARNING (3 por defecto) o menos.",
+      "que_hacer": "Generar un lote nuevo en el panel cuando venga bien (invalida el anterior).",
+      "origen": "app/messages.py recovery_warning_notification"
     }
   ]
 }

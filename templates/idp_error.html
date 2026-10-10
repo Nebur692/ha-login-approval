@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ branding.title or strings.page_title }}</title>
+  {% if branding.favicon_path %}<link rel="icon" href="/branding/favicon">{% endif %}
+  <style nonce="{{ request.state.csp_nonce }}">
+    body {
+      font-family: sans-serif; max-width: 400px; margin: 10vh auto; text-align: center; padding: 0 1em;
+      {% if branding.background_path %}background: url('/branding/background') center/cover no-repeat fixed;{% endif %}
+    }
+    {% if branding.background_path %}.card { background: rgba(255, 255, 255, 0.92); border-radius: 12px; padding: 1.5em; }{% endif %}
+    .logo { max-width: 160px; max-height: 160px; margin-bottom: 1em; }
+    h1 { font-size: 1.3em; margin: 0 0 0.75em; }
+    .problem-message { color: #b00020; }
+    .problem-act { font-weight: bold; }
+    .problem-footer { color: #666; font-size: 0.85em; }
+  </style>
+</head>
+<body>
+  <div class="{% if branding.background_path %}card{% endif %}">
+    {% if branding.logo_path %}<img class="logo" src="/branding/logo" alt="">{% endif %}
+    {% if branding.title %}<h1>{{ branding.title }}</h1>{% endif %}
+    <p class="problem-message">{{ problem.message }}</p>
+    <p class="problem-act">{{ problem.act }}</p>
+    <p class="problem-footer">{{ problem.footer }}<br>{{ problem.label }}: <code>{{ problem.code }}</code></p>
+  </div>
+</body>
+</html>

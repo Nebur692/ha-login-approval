@@ -1,5 +1,5 @@
 {
-  "generado": "2026-10-10T22:40:36Z",
+  "generado": "2026-10-10T23:38:02Z",
   "aviso": "Generado por bin/burburito. No editar a mano: la fuente de verdad es el burburito.json de al lado.",
   "proyecto": {
     "id": 3,
@@ -7,6 +7,90 @@
     "nombre": "SSO passwordless con aprobación desde HA"
   },
   "codigos": {
+    "aviso/recibir-aviso/falta-config": {
+      "codigo": "003-003-042-100",
+      "severidad": "aviso",
+      "actuar": true,
+      "titulo": "La cuenta no tiene códigos de recuperación"
+    },
+    "aviso/recibir-aviso/regla-propia": {
+      "codigo": "003-003-042-140",
+      "severidad": "aviso",
+      "actuar": true,
+      "titulo": "Quedan pocos códigos de recuperación"
+    },
+    "aviso/recibir-aviso/limite-propio": {
+      "codigo": "003-003-042-141",
+      "severidad": "error",
+      "actuar": true,
+      "titulo": "Se han acabado los códigos de recuperación"
+    },
+    "login/iniciar-sesion/sin-conexion": {
+      "codigo": "003-002-001-001",
+      "severidad": "aviso",
+      "actuar": true,
+      "titulo": "La página perdió la conexión con el servidor"
+    },
+    "login/iniciar-sesion/codigo-caducado": {
+      "codigo": "003-002-001-043",
+      "severidad": "aviso",
+      "actuar": false,
+      "titulo": "Este intento de inicio de sesión ya no existe"
+    },
+    "login/iniciar-sesion/no-autorizado": {
+      "codigo": "003-002-001-046",
+      "severidad": "aviso",
+      "actuar": true,
+      "titulo": "Esta cuenta no puede entrar así ahora mismo"
+    },
+    "login/iniciar-sesion/dato-invalido": {
+      "codigo": "003-002-001-061",
+      "severidad": "error",
+      "actuar": true,
+      "titulo": "La petición de inicio de sesión llega mal formada"
+    },
+    "login/iniciar-sesion/conflicto-estado": {
+      "codigo": "003-002-001-064",
+      "severidad": "aviso",
+      "actuar": false,
+      "titulo": "Este intento ya iba por otro paso"
+    },
+    "login/iniciar-sesion/config-invalida": {
+      "codigo": "003-002-001-101",
+      "severidad": "error",
+      "actuar": true,
+      "titulo": "El proveedor de identidad llama con una configuración que no coincide"
+    },
+    "login/aprobar-acceso/tiempo-agotado": {
+      "codigo": "003-002-002-002",
+      "severidad": "aviso",
+      "actuar": false,
+      "titulo": "Nadie respondió a la notificación a tiempo"
+    },
+    "login/aprobar-acceso/error-remoto": {
+      "codigo": "003-002-002-020",
+      "severidad": "error",
+      "actuar": true,
+      "titulo": "Home Assistant no pudo entregar la notificación"
+    },
+    "login/aprobar-acceso/cancelado": {
+      "codigo": "003-002-002-143",
+      "severidad": "aviso",
+      "actuar": false,
+      "titulo": "Alguien pulsó Rechazar en el móvil"
+    },
+    "login/recuperar-acceso/credencial-invalida": {
+      "codigo": "003-002-006-041",
+      "severidad": "aviso",
+      "actuar": true,
+      "titulo": "El código de recuperación no vale"
+    },
+    "login/recuperar-acceso/regla-propia": {
+      "codigo": "003-002-006-140",
+      "severidad": "aviso",
+      "actuar": false,
+      "titulo": "Aún no se puede usar un código de recuperación"
+    },
     "panel/iniciar-sesion/credencial-invalida": {
       "codigo": "003-001-001-041",
       "severidad": "aviso",

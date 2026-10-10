@@ -18,7 +18,10 @@
     .secondary { background: none; border: 1px solid #888; }
     #go-back-button { display: none; }
     #waiting-step, #escalation, #recovery-step { display: none; }
-    #error { color: #b00020; }
+    #problem { display: none; margin-top: 1em; }
+    .problem-message { color: #b00020; }
+    .problem-act { font-weight: bold; }
+    .problem-footer { color: #666; font-size: 0.85em; }
     .spinner-wrap { position: relative; margin: 1.5em auto; width: 44px; height: 44px; }
     .spinner {
       position: absolute; inset: 0; border-radius: 50%;
@@ -67,13 +70,23 @@
     </form>
   </div>
 
-  <p id="error"></p>
+  <div id="problem">
+    <p id="problem-message" class="problem-message"></p>
+    <p id="problem-act" class="problem-act"></p>
+    <p class="problem-footer"><span id="problem-footer"></span><br><span id="problem-label"></span>: <code id="problem-code"></code></p>
+    <p id="problem-return"></p>
+  </div>
   <button id="go-back-button" class="secondary">{{ strings.go_back_button }}</button>
   </div>
 
   <script nonce="{{ request.state.csp_nonce }}">
     const requestId = "{{ request_id }}";
     const STRINGS = {{ strings | tojson }};
+    // Every problem this page can show, already in the reader's language and
+    // with its burburito code — rendered here, so explaining a failure never
+    // needs another request (which may be the very thing that failed).
+    const PROBLEMS = {{ problems | tojson }};
+    const AUTO_RETURN_SECONDS = {{ auto_return_seconds }};
     const POLL_INTERVAL_MS = 2000;
     const RECOVERY_DELAY_SECONDS = {{ recovery_delay_seconds }};
     let polling = false;
@@ -82,9 +95,11 @@
     const waitingStep = document.getElementById("waiting-step");
     const escalation = document.getElementById("escalation");
     const recoveryStep = document.getElementById("recovery-step");
-    const errorEl = document.getElementById("error");
+    const problemEl = document.getElementById("problem");
     const countdownEl = document.getElementById("countdown");
+    const goBackButton = document.getElementById("go-back-button");
     let countdownTimer = null;
+    let returnTimer = null;
 
     // Ticks locally every second between polls, but always resynced to the
     // server's waiting_since (from /idp/status) so a page refresh, clock
@@ -109,16 +124,77 @@
       }
     }
 
-    document.getElementById("email-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const email = document.getElementById("email").value;
-      const resp = await fetch("/idp/email", {
+    function hideProblem() {
+      problemEl.style.display = "none";
+    }
+
+    function backToTheApp() {
+      window.location.href = `/idp/fail/${requestId}`;
+    }
+
+    // What went wrong, whether the reader needs to act, and the burburito
+    // footer. A failure that ends the sign-in stays on screen for
+    // AUTO_RETURN_SECONDS, so it can be read, then goes back to the app on its
+    // own — nobody should have to click anything to get out of a failed login.
+    function showProblem(name, { returnToApp = false } = {}) {
+      const p = PROBLEMS[name];
+      document.getElementById("problem-message").textContent = p.message;
+      document.getElementById("problem-act").textContent = p.act;
+      document.getElementById("problem-footer").textContent = p.footer;
+      document.getElementById("problem-label").textContent = p.label;
+      document.getElementById("problem-code").textContent = p.code;
+      const returnEl = document.getElementById("problem-return");
+      returnEl.textContent = "";
+      problemEl.style.display = "block";
+      if (!returnToApp) return;
+      goBackButton.style.display = "inline-block";
+      let left = AUTO_RETURN_SECONDS;
+      const tick = () => {
+        returnEl.textContent = STRINGS.returning_in.replace("{s}", left);
+        if (left-- <= 0) {
+          clearInterval(returnTimer);
+          backToTheApp();
+        }
+      };
+      tick();
+      returnTimer = setInterval(tick, 1000);
+    }
+
+    // fetch() that turns a network failure into the "offline" problem
+    // instead of an unhandled rejection that leaves the page frozen.
+    async function call(url, options) {
+      try {
+        return await fetch(url, options);
+      } catch (err) {
+        polling = false;
+        showProblem("offline");
+        return null;
+      }
+    }
+
+    function post(url, fields) {
+      return call(url, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ request_id: requestId, email }),
+        body: new URLSearchParams(fields),
       });
+    }
+
+    // The server's refusals that mean the same on every step.
+    function problemFor(status) {
+      if (status === 404) return "expired";
+      if (status === 409) return "conflict";
+      return "offline";
+    }
+
+    document.getElementById("email-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      hideProblem();
+      const email = document.getElementById("email").value;
+      const resp = await post("/idp/email", { request_id: requestId, email });
+      if (!resp) return;
       if (!resp.ok) {
-        errorEl.innerText = STRINGS.error_generic;
+        showProblem(problemFor(resp.status));
         return;
       }
       showOnly(waitingStep);
@@ -126,42 +202,44 @@
     });
 
     document.getElementById("retry-button").addEventListener("click", async () => {
-      errorEl.innerText = "";
+      hideProblem();
       escalation.style.display = "none";
-      await fetch("/idp/retry", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ request_id: requestId }),
-      });
+      await post("/idp/retry", { request_id: requestId });
     });
 
-    document.getElementById("go-back-button").addEventListener("click", () => {
-      window.location.href = `/idp/fail/${requestId}`;
-    });
+    goBackButton.addEventListener("click", backToTheApp);
 
     document.getElementById("show-recovery-button").addEventListener("click", () => {
       document.getElementById("recovery-request-id").value = requestId;
+      hideProblem();
       showOnly(recoveryStep);
     });
 
     document.getElementById("recovery-form").addEventListener("submit", async (e) => {
       e.preventDefault();
+      hideProblem();
       const code = document.getElementById("recovery-code").value;
-      const resp = await fetch("/idp/recovery", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ request_id: requestId, code }),
-      });
-      if (!resp.ok) {
-        errorEl.innerText = STRINGS.error_recovery_invalid;
+      const resp = await post("/idp/recovery", { request_id: requestId, code });
+      if (!resp) return;
+      if (resp.ok || resp.status === 409) {
+        // 409 here means it was approved meanwhile: finish either way.
+        window.location.href = `/idp/complete/${requestId}`;
         return;
       }
-      window.location.href = `/idp/complete/${requestId}`;
+      if (resp.status === 401) showProblem("recovery_invalid");
+      else if (resp.status === 403) showProblem("recovery_not_yet");
+      else showProblem(problemFor(resp.status));
     });
 
     async function poll() {
       if (!polling) return;
-      const resp = await fetch(`/idp/status/${requestId}`);
+      const resp = await call(`/idp/status/${requestId}`);
+      if (!resp) return;
+      if (!resp.ok) {
+        polling = false;
+        showProblem(problemFor(resp.status));
+        return;
+      }
       const data = await resp.json();
 
       if (data.status === "approved") {
@@ -175,14 +253,16 @@
         escalation.style.display = "block";
       }
 
-      const terminal = ["rejected", "timeout", "denied", "send_failed"];
-      if (terminal.includes(data.status)) {
-        // The button stays as a manual fallback, but the page redirects
-        // back to the RP on its own, immediately — nobody should have to
-        // click anything just to get back to a failed login.
-        document.getElementById("go-back-button").style.display = "inline-block";
+      if (data.status === "send_failed") {
+        // Nothing reached the phone, but a recovery code still can: stay on
+        // the page with that offer instead of going back.
         polling = false;
-        window.location.href = `/idp/fail/${requestId}`;
+        showProblem("send_failed");
+        return;
+      }
+      if (["rejected", "timeout", "denied"].includes(data.status)) {
+        polling = false;
+        showProblem(data.status, { returnToApp: true });
         return;
       }
 
@@ -197,7 +277,12 @@
     // Forward-compatible: if the RP ever sends login_hint, the server
     // already started the approval before this page even rendered.
     (async () => {
-      const resp = await fetch(`/idp/status/${requestId}`);
+      const resp = await call(`/idp/status/${requestId}`);
+      if (!resp) return;
+      if (!resp.ok) {
+        showProblem(problemFor(resp.status));
+        return;
+      }
       const data = await resp.json();
       if (data.status !== "awaiting_email") {
         showOnly(waitingStep);

@@ -6,6 +6,8 @@ The app being signed in to never arrives with the login itself; when ZITADEL
 can be asked, app/target_app.py finds it and it heads the body. Without it the
 body is browser, IP and location only."""
 
+from app import burburito
+
 _TEMPLATES = {
     "es": {
         "title": "Intento de inicio de sesión",
@@ -103,11 +105,15 @@ def recovery_warning_notification(lang: str, remaining: int, *, ever_generated: 
     wrong for an account that never generated a batch at all.
     """
     template = _RECOVERY_WARNING_TEMPLATES.get(lang, _RECOVERY_WARNING_TEMPLATES[_RECOVERY_WARNING_DEFAULT_LANG])
+    footer_lang = lang if lang in _RECOVERY_WARNING_TEMPLATES else _RECOVERY_WARNING_DEFAULT_LANG
     if remaining == 0 and not ever_generated:
-        return {"title": template["never_title"], "body": template["never_body"]}
-    if remaining == 0:
-        return {"title": template["exhausted_title"], "body": template["exhausted_body"]}
-    return {"title": template["low_title"], "body": template["low_body"].format(remaining=remaining)}
+        title, body, key = template["never_title"], template["never_body"], "aviso/recibir-aviso/falta-config"
+    elif remaining == 0:
+        title, body, key = template["exhausted_title"], template["exhausted_body"], "aviso/recibir-aviso/limite-propio"
+    else:
+        title, body = template["low_title"], template["low_body"].format(remaining=remaining)
+        key = "aviso/recibir-aviso/regla-propia"
+    return {"title": title, "body": with_burburito(body, key, footer_lang)}
 
 
 _BRIDGE_PAGE_STRINGS = {
@@ -125,6 +131,7 @@ _BRIDGE_PAGE_STRINGS = {
         "error_generic": "Algo ha ido mal. Inténtalo de nuevo.",
         "error_recovery_invalid": "Ese código de recuperación no es válido.",
         "error_not_approved": "El inicio de sesión no se ha aprobado.",
+        "returning_in": "Volviendo a la aplicación en {s} s…",
     },
     "en": {
         "page_title": "Sign in",
@@ -140,6 +147,7 @@ _BRIDGE_PAGE_STRINGS = {
         "error_generic": "Something went wrong. Please try again.",
         "error_recovery_invalid": "That recovery code isn't valid.",
         "error_not_approved": "Sign-in was not approved.",
+        "returning_in": "Going back to the app in {s} s…",
     },
 }
 _BRIDGE_DEFAULT_LANG = "en"
@@ -157,3 +165,85 @@ def detect_browser_lang(accept_language_header: str | None) -> str:
 
 def bridge_page_strings(lang: str) -> dict:
     return _BRIDGE_PAGE_STRINGS.get(lang, _BRIDGE_PAGE_STRINGS[_BRIDGE_DEFAULT_LANG])
+
+
+# What went wrong on the sign-in page, in the reader's words, keyed by the
+# short name the page's script uses. Each has its burburito key; the page
+# shows the message, whether the reader needs to act, and the footer.
+_BRIDGE_PROBLEMS = {
+    "denied": ("login/iniciar-sesion/no-autorizado", {
+        "es": "Esta cuenta no puede iniciar sesión así ahora mismo.",
+        "en": "This account can't sign in this way right now.",
+    }),
+    "rejected": ("login/aprobar-acceso/cancelado", {
+        "es": "Se ha pulsado «Rechazar» en el móvil, así que no se ha iniciado sesión.",
+        "en": "“Reject” was tapped on the phone, so you have not been signed in.",
+    }),
+    "timeout": ("login/aprobar-acceso/tiempo-agotado", {
+        "es": "Nadie ha respondido a la notificación a tiempo.",
+        "en": "Nobody answered the notification in time.",
+    }),
+    "send_failed": ("login/aprobar-acceso/error-remoto", {
+        "es": "No se ha podido enviar la notificación al móvil. Puedes entrar con un código de recuperación.",
+        "en": "The notification could not be sent to your phone. You can sign in with a recovery code.",
+    }),
+    "expired": ("login/iniciar-sesion/codigo-caducado", {
+        "es": "Este intento de inicio de sesión ha caducado. Vuelve a la aplicación y empieza de nuevo.",
+        "en": "This sign-in attempt has expired. Go back to the app and start again.",
+    }),
+    "conflict": ("login/iniciar-sesion/conflicto-estado", {
+        "es": "Este intento ya iba por otro paso, quizá desde otra pestaña. Vuelve a la aplicación y empieza de nuevo.",
+        "en": "This sign-in attempt had already moved on, maybe in another tab. Go back to the app and start again.",
+    }),
+    "recovery_invalid": ("login/recuperar-acceso/credencial-invalida", {
+        "es": "Ese código de recuperación no es válido.",
+        "en": "That recovery code isn't valid.",
+    }),
+    "recovery_not_yet": ("login/recuperar-acceso/regla-propia", {
+        "es": "Todavía no se puede usar un código de recuperación. Espera a que la página te lo ofrezca.",
+        "en": "A recovery code can't be used yet. Wait until the page offers it.",
+    }),
+    "offline": ("login/iniciar-sesion/sin-conexion", {
+        "es": "No hay conexión con el servidor. Comprueba tu conexión y recarga la página.",
+        "en": "The server can't be reached. Check your connection and reload the page.",
+    }),
+    "bad_client": ("login/iniciar-sesion/config-invalida", {
+        "es": "Este inicio de sesión no está bien configurado, así que no se puede continuar.",
+        "en": "This sign-in isn't set up correctly, so it can't continue.",
+    }),
+    "bad_request": ("login/iniciar-sesion/dato-invalido", {
+        "es": "La petición de inicio de sesión ha llegado mal formada, así que no se puede continuar.",
+        "en": "The sign-in request arrived malformed, so it can't continue.",
+    }),
+}
+_ACT_LINE = {
+    True: {"es": "SÍ tienes que hacer algo.", "en": "You DO need to do something."},
+    False: {"es": "NO tienes que hacer nada.", "en": "You do NOT need to do anything."},
+}
+
+
+def bridge_problem(name: str, lang: str) -> dict:
+    """{message, act, footer, label, code} for one problem on the sign-in page."""
+    lang = lang if lang in ("es", "en") else _BRIDGE_DEFAULT_LANG
+    key, texts = _BRIDGE_PROBLEMS[name]
+    footer = burburito.footer(key, lang)
+    return {
+        "message": texts[lang],
+        "act": _ACT_LINE[footer["act"]][lang],
+        "footer": footer["text"],
+        "label": footer["label"],
+        "code": footer["code"],
+    }
+
+
+def bridge_problems(lang: str) -> dict:
+    """Every problem the sign-in page can show, ready for its script: the page
+    renders them itself, so it needs no request to explain a failed one."""
+    return {name: bridge_problem(name, lang) for name in _BRIDGE_PROBLEMS}
+
+
+def with_burburito(body: str, key: str, lang: str) -> str:
+    """A push-notification body with the act line and burburito footer at the end."""
+    lang = lang if lang in ("es", "en") else "en"
+    footer = burburito.footer(key, lang)
+    return f"{body}\n\n{_ACT_LINE[footer['act']][lang]}\n{footer['text']}\n{footer['label']}: {footer['code']}"
