@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ branding.title or strings.page_title }}</title>
   {% if branding.favicon_path %}<link rel="icon" href="/branding/favicon">{% endif %}
-  <style>
+  <style nonce="{{ request.state.csp_nonce }}">
     body {
       font-family: sans-serif; max-width: 400px; margin: 10vh auto; text-align: center; padding: 0 1em;
       {% if branding.background_path %}background: url('/branding/background') center/cover no-repeat fixed;{% endif %}
@@ -16,6 +16,7 @@
     input { width: 100%; padding: 0.5em; font-size: 1em; box-sizing: border-box; }
     button { padding: 0.5em 1.5em; font-size: 1em; margin-top: 1em; cursor: pointer; }
     .secondary { background: none; border: 1px solid #888; }
+    #go-back-button { display: none; }
     #waiting-step, #escalation, #recovery-step { display: none; }
     #error { color: #b00020; }
     .spinner-wrap { position: relative; margin: 1.5em auto; width: 44px; height: 44px; }
@@ -67,10 +68,10 @@
   </div>
 
   <p id="error"></p>
-  <button id="go-back-button" class="secondary" style="display:none;">{{ strings.go_back_button }}</button>
+  <button id="go-back-button" class="secondary">{{ strings.go_back_button }}</button>
   </div>
 
-  <script>
+  <script nonce="{{ request.state.csp_nonce }}">
     const requestId = "{{ request_id }}";
     const STRINGS = {{ strings | tojson }};
     const POLL_INTERVAL_MS = 2000;

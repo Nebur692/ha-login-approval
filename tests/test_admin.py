@@ -16,6 +16,8 @@ ADMIN_ROUTES = [
     ("GET", "/admin/recovery"),
     ("GET", "/admin/blocked-ips"),
     ("GET", "/admin/branding"),
+    ("GET", "/admin/signing-key"),
+    ("POST", "/admin/signing-key/rotate"),
 ]
 
 
@@ -148,3 +150,29 @@ async def test_branding_upload_rejects_invalid_image(client, admin_ready):
         follow_redirects=False,
     )
     assert resp.status_code == 400
+
+
+async def test_accounts_page_still_shows_accounts_when_home_assistant_is_down(client, admin_ready):
+    import httpx
+
+    await accounts.set_targets(db.get_db(), "alice@example.com", ["mobile_app_alice", "mobile_app_tablet"])
+    await accounts.set_targets(db.get_db(), "bob@example.com", [])
+    down = AsyncMock(side_effect=httpx.ConnectError("Name or service not known"))
+    with patch("app.routers.admin.accounts.ha_client.get_notify_targets", down):
+        page = await client.get("/admin/accounts", headers=AUTH)
+
+    assert page.status_code == 200
+    assert "Home Assistant isn't answering" in page.text
+    assert "alice@example.com" in page.text and "bob@example.com" in page.text
+    assert "mobile_app_alice" in page.text and "mobile_app_tablet" in page.text
+    assert "No device assigned." in page.text
+    # read-only: a save form here would wipe every account's devices
+    assert "/admin/accounts/save" not in page.text
+
+
+async def test_accounts_page_with_home_assistant_up_has_no_warning(client, admin_ready):
+    with patch("app.routers.admin.accounts.ha_client.get_notify_targets", AsyncMock(return_value=["mobile_app_x"])):
+        page = await client.get("/admin/accounts", headers=AUTH)
+    assert page.status_code == 200
+    assert "Home Assistant isn't answering" not in page.text
+    assert "/admin/accounts/save" in page.text

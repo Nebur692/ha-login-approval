@@ -6,6 +6,24 @@
    (ZITADEL, Keycloak, Authentik, ...). An account with no device checked can never complete a
    passwordless login.</p>
 
+{% if not ha_reachable %}
+<p class="warn">Home Assistant isn't answering, so its devices can't be listed. The accounts are shown
+   as they are, and can be edited again once it answers.</p>
+
+{% for row in rows %}
+<div class="card">
+  <h2>{{ row.email }}</h2>
+  {% if row.targets %}
+  <ul>
+    {% for target in row.targets %}<li><code>{{ target }}</code></li>{% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">No device assigned.</p>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% else %}
 {% if not mobile_targets %}
   <p class="empty">No notify.mobile_app_* device found in Home Assistant.</p>
 {% endif %}
@@ -13,9 +31,9 @@
 <div class="card">
   <h2>Add account</h2>
   <form method="post" action="/admin/accounts/save">
-    <input type="email" name="email" placeholder="person@example.com" required style="width:100%; padding:0.4rem; box-sizing:border-box;">
+    <input type="email" name="email" placeholder="person@example.com" required class="full-width">
     {% for target in mobile_targets %}
-    <label style="display:block; font-family: monospace; font-size: 0.9rem;">
+    <label class="target-label">
       <input type="checkbox" name="targets" value="{{ target }}">
       {{ target }}
     </label>
@@ -30,7 +48,7 @@
   <form method="post" action="/admin/accounts/save">
     <input type="hidden" name="email" value="{{ row.email }}">
     {% for target in mobile_targets %}
-    <label style="display:block; font-family: monospace; font-size: 0.9rem;">
+    <label class="target-label">
       <input type="checkbox" name="targets" value="{{ target }}" {% if target in row.targets %}checked{% endif %}>
       {{ target }}
     </label>
@@ -39,4 +57,5 @@
   </form>
 </div>
 {% endfor %}
+{% endif %}
 {% endblock %}

@@ -11,6 +11,9 @@ services:
       - HA_TOKEN=your_long_lived_ha_token_here
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=changeme
+      # The service runs as this user and group, never root (Unraid: 99 / 100)
+      - PUID=1000
+      - PGID=1000
       # Passwordless OIDC provider — works with ZITADEL, Keycloak, Authentik,
       # or any RP that supports a generic external OIDC provider.
       # IDP_ISSUER_URL must be a PUBLIC https:// URL behind your reverse

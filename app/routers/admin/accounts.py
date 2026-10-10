@@ -3,6 +3,8 @@ devices) — independent of any relying party (ZITADEL, Keycloak, Authentik,
 ...). Unlike devices.py (ZITADEL-specific, only registered when ZITADEL is
 configured), this page always exists: it's the only account model
 routers/idp.py actually uses."""
+import logging
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
@@ -12,18 +14,29 @@ from app.routers.admin._auth import require_admin
 
 from app.routers.admin._templates import templates
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.get("/admin/accounts")
 async def accounts_page(request: Request, _: str = Depends(require_admin)):
-    all_targets = await ha_client.get_notify_targets()
+    # The device list comes from Home Assistant; the accounts do not. With HA
+    # away the accounts are still shown, read-only: a form without the device
+    # checkboxes would save every account with no devices at all.
+    try:
+        all_targets = await ha_client.get_notify_targets()
+        ha_reachable = True
+    except Exception as exc:
+        logger.warning("Could not list Home Assistant devices for the accounts page: %s", exc)
+        all_targets = []
+        ha_reachable = False
     mobile_targets = [t for t in all_targets if t.startswith("mobile_app_")]
     rows = await accounts.list_accounts(get_db())
 
     return templates.TemplateResponse(request, "admin/accounts.html", {
         "active": "accounts",
         "mobile_targets": mobile_targets,
+        "ha_reachable": ha_reachable,
         "rows": rows,
     })
 

@@ -651,6 +651,12 @@ async def _periodic_cleanup_loop() -> None:
     while True:
         await asyncio.sleep(_CLEANUP_INTERVAL_SECONDS)
         _purge_expired_state()
+        try:
+            await idp_jwt.purge_retired_keys()
+        except Exception as exc:
+            # A failed purge only leaves a retired key in the DB for another
+            # round; it must not end the loop that also cleans login state.
+            logger.error("Could not purge retired signing keys: %s", exc)
 
 
 async def start_periodic_cleanup() -> None:

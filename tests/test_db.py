@@ -31,7 +31,7 @@ async def test_migrations_apply_cleanly(temp_db):
 async def test_migration_recorded_exactly_once(temp_db):
     cursor = await temp_db.execute("SELECT version FROM schema_migrations")
     versions = [row["version"] for row in await cursor.fetchall()]
-    assert versions == [1]
+    assert versions == [1, 2]
 
 
 async def test_init_db_is_idempotent(tmp_path, monkeypatch):

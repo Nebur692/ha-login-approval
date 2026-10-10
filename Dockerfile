@@ -8,10 +8,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY templates ./templates
 COPY main.py .
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # Persistent volume: SQLite DB (recovery codes, audit log, IP blocks,
 # branding) and, from v2.0.0's GeoIP phase on, the MaxMind .mmdb files.
-RUN mkdir -p /data
+RUN mkdir -p /data && chmod 755 /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 8000
 
@@ -23,4 +24,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"
 
+# Hands /data to PUID:PGID (default 1000:1000) and drops root before
+# starting uvicorn — see docker-entrypoint.sh.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

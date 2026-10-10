@@ -8,13 +8,13 @@ favicon are converted to PNG, background to JPEG, each resized down to a sane ma
 <form method="post" action="/admin/branding/save" enctype="multipart/form-data">
   <label>Title<br><input type="text" name="title" value="{{ branding.title or '' }}"></label><br><br>
   <label>Logo<br><input type="file" name="logo" accept="image/*"></label>
-  {% if branding.logo_path %}<p class="muted">Current: <img src="/branding/logo" alt="" style="max-height:48px;vertical-align:middle;"></p>{% endif %}
+  {% if branding.logo_path %}<p class="muted">Current: <img src="/branding/logo" alt="" class="thumb"></p>{% endif %}
   <br>
   <label>Background<br><input type="file" name="background" accept="image/*"></label>
-  {% if branding.background_path %}<p class="muted">Current: <img src="/branding/background" alt="" style="max-height:48px;vertical-align:middle;"></p>{% endif %}
+  {% if branding.background_path %}<p class="muted">Current: <img src="/branding/background" alt="" class="thumb"></p>{% endif %}
   <br>
   <label>Favicon<br><input type="file" name="favicon" accept="image/*"></label>
-  {% if branding.favicon_path %}<p class="muted">Current: <img src="/branding/favicon" alt="" style="max-height:32px;vertical-align:middle;"></p>{% endif %}
+  {% if branding.favicon_path %}<p class="muted">Current: <img src="/branding/favicon" alt="" class="thumb small"></p>{% endif %}
   <br><br>
   <button type="submit">Save</button>
 </form>

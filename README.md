@@ -82,6 +82,7 @@ variables:
 |---|---|---|
 | `APPROVAL_TIMEOUT_SECONDS` | `120` | How long the flow waits for a tap before failing. |
 | `BRIDGE_RECOVERY_UNLOCK_DELAY_SECONDS` | `60` | Seconds with no response before the bridge page offers retry/recovery-code options. The original approval keeps waiting in the background regardless. |
+| `PUID` / `PGID` | `1000` / `1000` | User and group the service runs as — never root. On start it hands its `/data` folder to them, which also upgrades a folder created by an older version. On Unraid use `99` / `100`. The database is kept readable by that user only (`0600`): it holds the key that signs every login. |
 | `TRUSTED_PROXIES` | *(empty)* | Reverse proxies whose `X-Forwarded-For` / `X-Real-IP` headers this service reads, as IPs or CIDRs (e.g. `["172.18.0.0/16"]`). Those headers are how a proxy reports who called it, and they are only used when the request arrives from an address listed here — otherwise the connecting address is used. Set this to your proxy so notifications, the audit log and IP blocking record the visitor rather than the proxy. |
 | `IP_BLOCK_THRESHOLD` | `3` | Consecutive failures (explicit reject or wrong recovery code, same account + IP) before blocking. |
 | `RECOVERY_CODE_BATCH_SIZE` | `10` | How many recovery codes get generated at once from `/admin/recovery`. |
@@ -195,6 +196,7 @@ All under `/admin`, protected by `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
 | **Recovery codes** | Generate or regenerate a batch per account — shown once, then never retrievable again. Regenerating instantly invalidates every code from the previous batch. |
 | **Blocked IPs** | See who's currently blocked and unblock manually — important if three accidental rejects (or mistyped codes) lock out the real account owner. |
 | **Branding** | Upload a logo/background/favicon and set a title for the bridge page. Any image format or size is accepted — each is automatically converted and resized (logo/favicon to PNG, background to JPEG). |
+| **Signing key** | The key that signs every login. **Rotate** makes a new one sign from that moment, while the old one keeps verifying for an hour so nothing in flight breaks; tick the box to delete the old one at once instead, if it may have leaked. Relying parties pick up the new key on their own. |
 
 ### 🧭 Usage — what it looks like for the person logging in
 
@@ -340,6 +342,7 @@ entorno:
 |---|---|---|
 | `APPROVAL_TIMEOUT_SECONDS` | `120` | Cuánto espera el flujo a que pulses antes de fallar. |
 | `BRIDGE_RECOVERY_UNLOCK_DELAY_SECONDS` | `60` | Segundos sin respuesta antes de que la página ofrezca reintentar o usar un código de recuperación. La aprobación original sigue esperando en paralelo. |
+| `PUID` / `PGID` | `1000` / `1000` | Usuario y grupo con los que corre el servicio — nunca root. Al arrancar les entrega su carpeta `/data`, lo que también actualiza una carpeta creada por una versión anterior. En Unraid usa `99` / `100`. La base de datos solo la puede leer ese usuario (`0600`): guarda la clave que firma cada login. |
 | `TRUSTED_PROXIES` | *(vacío)* | Proxies inversos cuyas cabeceras `X-Forwarded-For` / `X-Real-IP` lee este servicio, como IPs o CIDRs (p. ej. `["172.18.0.0/16"]`). Esas cabeceras son la forma que tiene un proxy de decir quién le llamó, y solo se usan cuando la petición llega desde una dirección de esta lista; si no, se usa la dirección de conexión. Ponlo apuntando a tu proxy para que las notificaciones, la auditoría y el bloqueo por IP registren al visitante y no al propio proxy. |
 | `IP_BLOCK_THRESHOLD` | `3` | Fallos consecutivos (rechazo explícito o código incorrecto, misma cuenta + IP) antes de bloquear. |
 | `RECOVERY_CODE_BATCH_SIZE` | `10` | Cuántos códigos de recuperación se generan de golpe desde `/admin/recovery`. |
@@ -457,6 +460,7 @@ Todo bajo `/admin`, protegido por `ADMIN_USERNAME`/`ADMIN_PASSWORD`:
 | **Recovery codes** | Generar o regenerar un lote por cuenta — se muestran una sola vez, luego nunca se pueden recuperar. Regenerar invalida al instante todos los códigos del lote anterior. |
 | **Blocked IPs** | Ver quién está bloqueado ahora mismo y desbloquear manualmente — importante si tres rechazos accidentales (o códigos mal tecleados) dejan fuera al dueño real de la cuenta. |
 | **Branding** | Sube un logo/fondo/favicon y pon un título para la página puente. Se acepta cualquier formato o tamaño de imagen — cada una se convierte y redimensiona automáticamente (logo/favicon a PNG, fondo a JPEG). |
+| **Signing key** | La clave que firma cada login. **Rotate** hace que una nueva firme desde ese momento, mientras la anterior sigue sirviendo para verificar durante una hora, para que no se rompa nada en curso; marca la casilla para borrar la anterior al instante, si puede haberse filtrado. Los proveedores recogen la clave nueva solos. |
 
 ### 🧭 Uso — cómo lo vive quien inicia sesión
 

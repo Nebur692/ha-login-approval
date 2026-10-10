@@ -10,6 +10,7 @@ Migrations are plain additive .sql scripts under app/migrations/, named
 never edit a migration after it's shipped, add a new one instead.
 """
 import logging
+import os
 from pathlib import Path
 
 import aiosqlite
@@ -31,7 +32,20 @@ async def init_db() -> None:
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA foreign_keys = ON")
     await _run_migrations(db)
+    # After the migrations, so the file certainly exists even on a first run.
+    _make_private(settings.sqlite_db_path)
     _db = db
+
+
+def _make_private(path: str) -> None:
+    """The database holds the id_token signing key: owner-only. SQLite gives
+    its -wal/-journal files the database's own mode, so this covers them too."""
+    if path == ":memory:":
+        return
+    try:
+        os.chmod(path, 0o600)
+    except OSError as exc:
+        logger.warning("Could not make %s owner-only: %s", path, exc)
 
 
 async def close_db() -> None:

@@ -4,7 +4,7 @@
 <h1>Login attempt history</h1>
 
 <form method="get" action="/admin/audit">
-  <select name="account_id" onchange="this.form.submit()">
+  <select name="account_id" id="account-select">
     {% for a in accounts %}
     <option value="{{ a.email }}" {% if a.email == selected_id %}selected{% endif %}>{{ a.email }}</option>
     {% endfor %}
@@ -27,4 +27,9 @@
   {% endfor %}
 </table>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ request.state.csp_nonce }}">
+  document.getElementById("account-select")?.addEventListener("change", (e) => e.target.form.submit());
+</script>
 {% endblock %}

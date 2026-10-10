@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from app import db, geoip_updater, ha_client, idp_jwt
+from app.security_headers import SecurityHeadersMiddleware
 from app.routers import admin, idp
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -64,6 +65,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ha-login-approval", lifespan=lifespan, docs_url=None, redoc_url=None)
+app.add_middleware(SecurityHeadersMiddleware)
 app.include_router(admin.router)
 app.include_router(idp.router)
 
