@@ -63,7 +63,9 @@ def _require_key() -> None:
         raise RuntimeError("Signing key not loaded — call ensure_signing_key() first")
 
 
-def build_id_token(issuer: str, audience: str, subject: str, email: str, ttl_seconds: int = 300) -> str:
+def build_id_token(
+    issuer: str, audience: str, subject: str, email: str, ttl_seconds: int = 300, nonce: str | None = None,
+) -> str:
     _require_key()
     now = int(time.time())
     claims = {
@@ -76,6 +78,10 @@ def build_id_token(issuer: str, audience: str, subject: str, email: str, ttl_sec
         "email_verified": True,
         "preferred_username": email,
     }
+    # OIDC Core §3.1.3.6: a nonce sent to /authorize must come back unchanged,
+    # and a client that sent one rejects a token without it.
+    if nonce is not None:
+        claims["nonce"] = nonce
     return jwt.encode(claims, _private_key_pem, algorithm=ALGORITHM, headers={"kid": _active_kid})
 
 

@@ -2,24 +2,23 @@
 language, falling back to English for anything we don't have a translation
 for), enriched with real details of the login attempt.
 
-Note: ZITADEL's CreateSession payload — confirmed by capturing two real
-requests during this project's design phase — never includes which
-application/service the session will end up being used for (SAML SP, OIDC
-client, etc.). Session creation happens generically, before ZITADEL knows
-which app the login will complete for, so that detail genuinely isn't
-available at this hook point. Only the browser and the source IP are."""
+The app being signed in to never arrives with the login itself; when ZITADEL
+can be asked, app/target_app.py finds it and it heads the body. Without it the
+body is browser, IP and location only."""
 
 _TEMPLATES = {
     "es": {
         "title": "Intento de inicio de sesión",
-        "body": "Navegador: {browser}\nIP: {ip}{location}\n\n¿Eres tú?",
+        "body": "{app}Navegador: {browser}\nIP: {ip}{location}\n\n¿Eres tú?",
+        "app_label": "App",
         "location_label": "Ubicación",
         "approve": "Aprobar",
         "reject": "Rechazar",
     },
     "en": {
         "title": "Sign-in attempt",
-        "body": "Browser: {browser}\nIP: {ip}{location}\n\nWas this you?",
+        "body": "{app}Browser: {browser}\nIP: {ip}{location}\n\nWas this you?",
+        "app_label": "App",
         "location_label": "Location",
         "approve": "Approve",
         "reject": "Reject",
@@ -48,9 +47,10 @@ def build_notification(lang: str, user_agent: dict) -> dict:
     ip = user_agent.get("ip", "unknown")
     geo_parts = [p for p in (user_agent.get("geo_city"), user_agent.get("geo_country"), user_agent.get("geo_asn_org")) if p]
     location = f"\n{template['location_label']}: {', '.join(geo_parts)}" if geo_parts else ""
+    app = f"{template['app_label']}: {user_agent['app']}\n" if user_agent.get("app") else ""
     return {
         "title": template["title"],
-        "body": template["body"].format(browser=browser, ip=ip, location=location),
+        "body": template["body"].format(app=app, browser=browser, ip=ip, location=location),
         "approve": template["approve"],
         "reject": template["reject"],
     }

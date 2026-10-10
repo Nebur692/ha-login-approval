@@ -24,3 +24,7 @@ services:
       # Optional GeoIP enrichment (self-hosted MaxMind GeoLite2) — leave unset to skip
       # - GEOIP_ACCOUNT_ID=your_maxmind_account_id
       # - GEOIP_LICENSE_KEY=your_maxmind_license_key
+      # Optional, ZITADEL only: name the app in the notification (read-only service user)
+      # - ZITADEL_API_URL=https://sso.example.com
+      # - ZITADEL_API_CLIENT_ID=your_service_user_client_id
+      # - ZITADEL_API_CLIENT_SECRET=your_service_user_client_secret

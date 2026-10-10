@@ -35,6 +35,8 @@ class LoginContext:
     geo_city: str | None = None
     geo_country: str | None = None
     geo_asn_org: str | None = None
+    app: str | None = None
+    """Which app the login is for, when the broker could tell us (app/target_app.py)."""
 
 
 async def run_approval(targets: list[str], request_id: str, context: LoginContext) -> ApprovalOutcome:
@@ -48,6 +50,7 @@ async def run_approval(targets: list[str], request_id: str, context: LoginContex
         "geo_city": context.geo_city,
         "geo_country": context.geo_country,
         "geo_asn_org": context.geo_asn_org,
+        "app": context.app,
     })
 
     send_failures = 0

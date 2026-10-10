@@ -1031,3 +1031,149 @@ async def test_the_cap_is_per_account_not_per_source_address(client, idp_ready, 
 
     assert refused == idp_router._ACCOUNT_ATTEMPT_LIMIT + 4
     assert verify.await_count == idp_router._ACCOUNT_ATTEMPT_LIMIT
+
+
+# --- v2.4.0: nonce, PKCE and redirect_uri at /token (A-01) ----------------
+
+
+from app import target_app
+from app.target_app import TargetApp
+
+VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"  # RFC 7636 appendix B
+RFC_CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"  # RFC 7636 appendix B
+
+
+def test_pkce_check_matches_the_rfc_example():
+    assert idp_router._pkce_ok(RFC_CHALLENGE, VERIFIER)
+    assert not idp_router._pkce_ok(RFC_CHALLENGE, VERIFIER[:-1] + "Y")
+    assert idp_router._pkce_ok(None, None)
+
+
+async def _approved_code(client, **authorize_overrides) -> str:
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    resp = await client.get("/authorize", params=_authorize_params(**authorize_overrides))
+    assert resp.status_code == 200, resp.text
+    request_id = idp_router._pending.copy().popitem()[0]
+    with patch("app.routers.idp.run_approval", AsyncMock(return_value=ApprovalOutcome.APPROVED)):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+    complete_resp = await client.get(f"/idp/complete/{request_id}", follow_redirects=False)
+    return complete_resp.headers["location"].split("code=")[1].split("&")[0]
+
+
+async def _redeem(client, code, **extra):
+    data = {"grant_type": "authorization_code", "code": code, "redirect_uri": REDIRECT_URI}
+    data.update(extra)
+    data = {k: v for k, v in data.items() if v is not None}
+    return await client.post("/token", data=data, headers={"Authorization": "Basic dGVzdC1ycDp0ZXN0LXJwLXNlY3JldA=="})
+
+
+def _claims(token_resp):
+    import jwt as pyjwt
+    return pyjwt.decode(token_resp.json()["id_token"], options={"verify_signature": False})
+
+
+async def test_discovery_advertises_s256(client, idp_ready):
+    body = (await client.get("/.well-known/openid-configuration")).json()
+    assert body["code_challenge_methods_supported"] == ["S256"]
+
+
+async def test_nonce_comes_back_in_the_id_token(client, idp_ready):
+    code = await _approved_code(client, nonce="n-0S6_WzA2Mj")
+    resp = await _redeem(client, code)
+    assert resp.status_code == 200
+    assert _claims(resp)["nonce"] == "n-0S6_WzA2Mj"
+
+
+async def test_no_nonce_sent_means_no_nonce_claim(client, idp_ready):
+    resp = await _redeem(client, await _approved_code(client))
+    assert resp.status_code == 200
+    assert "nonce" not in _claims(resp)
+
+
+async def test_overlong_nonce_rejected(client, idp_ready):
+    resp = await client.get("/authorize", params=_authorize_params(nonce="x" * 513))
+    assert resp.status_code == 400
+
+
+async def test_pkce_right_verifier_gets_tokens(client, idp_ready):
+    challenge = RFC_CHALLENGE
+    code = await _approved_code(client, code_challenge=challenge, code_challenge_method="S256")
+    resp = await _redeem(client, code, code_verifier=VERIFIER)
+    assert resp.status_code == 200
+
+
+@pytest.mark.parametrize("verifier", [None, "", "wrong-verifier-wrong-verifier-wrong-verifier-x"])
+async def test_pkce_missing_or_wrong_verifier_rejected(client, idp_ready, verifier):
+    challenge = RFC_CHALLENGE
+    code = await _approved_code(client, code_challenge=challenge, code_challenge_method="S256")
+    resp = await _redeem(client, code, code_verifier=verifier)
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "invalid_grant"
+    # and the code is spent: the right verifier afterwards gets nothing either
+    assert (await _redeem(client, code, code_verifier=VERIFIER)).status_code == 400
+
+
+async def test_without_pkce_a_stray_verifier_is_ignored(client, idp_ready):
+    resp = await _redeem(client, await _approved_code(client), code_verifier=VERIFIER)
+    assert resp.status_code == 200
+
+
+@pytest.mark.parametrize("params", [
+    {"code_challenge": RFC_CHALLENGE, "code_challenge_method": "plain"},
+    {"code_challenge": RFC_CHALLENGE},
+    {"code_challenge": "too-short", "code_challenge_method": "S256"},
+])
+async def test_authorize_rejects_plain_or_malformed_challenge(client, idp_ready, params):
+    resp = await client.get("/authorize", params=_authorize_params(**params))
+    assert resp.status_code == 400
+    assert idp_router._pending == {}
+
+
+async def test_token_with_a_different_redirect_uri_rejected(client, idp_ready):
+    code = await _approved_code(client)
+    resp = await _redeem(client, code, redirect_uri="https://evil.test/callback")
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "invalid_grant"
+
+
+async def test_token_without_redirect_uri_still_accepted(client, idp_ready):
+    code = await _approved_code(client)
+    resp = await _redeem(client, code, redirect_uri=None)
+    assert resp.status_code == 200
+
+
+# --- the app line in the notification ------------------------------------
+
+async def test_notification_context_carries_the_app_and_asks_once_per_login(client, idp_ready, monkeypatch):
+    monkeypatch.setattr(settings, "bridge_recovery_unlock_delay_seconds", 0)
+    resolve = AsyncMock(return_value=TargetApp(name="DIOS", host="dios.example.com"))
+    monkeypatch.setattr(target_app, "resolve", resolve)
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params(state="390000000000000001"))
+    request_id = idp_router._pending.copy().popitem()[0]
+
+    first = AsyncMock(return_value=ApprovalOutcome.TIMEOUT)
+    with patch("app.routers.idp.run_approval", first):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+    second = AsyncMock(return_value=ApprovalOutcome.APPROVED)
+    with patch("app.routers.idp.run_approval", second):
+        await client.post("/idp/retry", data={"request_id": request_id})
+        await asyncio.sleep(0.05)
+
+    assert first.call_args.args[2].app == "DIOS (dios.example.com)"
+    assert second.call_args.args[2].app == "DIOS (dios.example.com)"
+    resolve.assert_awaited_once_with("390000000000000001")
+
+
+async def test_notification_context_without_an_app(client, idp_ready, monkeypatch):
+    monkeypatch.setattr(target_app, "resolve", AsyncMock(return_value=None))
+    await accounts.set_targets(db.get_db(), EMAIL, ["mobile_app_x"])
+    await client.get("/authorize", params=_authorize_params())
+    request_id = idp_router._pending.copy().popitem()[0]
+    run = AsyncMock(return_value=ApprovalOutcome.APPROVED)
+    with patch("app.routers.idp.run_approval", run):
+        await client.post("/idp/email", data={"request_id": request_id, "email": EMAIL})
+        await asyncio.sleep(0.05)
+    assert run.call_args.args[2].app is None

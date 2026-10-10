@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     # say. Configure this with your proxy and its real chain is used instead.
     trusted_proxies: list[str] = []
 
+    # Optional: name the app being signed in to in the approval notification.
+    # Only ZITADEL can be asked (see app/target_app.py). Use a service user
+    # with a read-only role — IAM_OWNER_VIEWER is enough — since all it does
+    # is read the event store. Left empty, the notification has no app line.
+    zitadel_api_url: str = ""
+    """ZITADEL's own base URL, e.g. https://sso.example.com"""
+    zitadel_api_client_id: str = ""
+    zitadel_api_client_secret: str = ""
+
     # v2.0.0 anti-abuse
     ip_block_threshold: int = 3
     """Consecutive failures (explicit rejects + wrong recovery codes, same

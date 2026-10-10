@@ -26,7 +26,10 @@ client-side JS does or doesn't enforce.
 """
 import asyncio
 import base64
+import hashlib
+import hmac
 import logging
+import re
 import time
 import uuid
 from urllib.parse import urlencode
@@ -35,7 +38,7 @@ from fastapi import APIRouter, Form, Header, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import accounts, audit, client_ip, geoip, ha_client, idp_jwt, ip_blocking, messages, recovery_codes
+from app import accounts, audit, client_ip, geoip, ha_client, idp_jwt, ip_blocking, messages, recovery_codes, target_app
 from app.approval_flow import ApprovalOutcome, LoginContext, run_approval
 from app.branding import CONTENT_TYPES, asset_path, get_branding
 from app.config import settings
@@ -87,6 +90,12 @@ _MAX_USER_AGENT = 512
 # logins. They expire, but not before a determined caller could make a great
 # many, so the oldest give way rather than the process growing without limit.
 _MAX_PENDING = 500
+# `nonce` is opaque to us and only ever echoed back inside the id_token, but it
+# is the sender's text, so it gets a ceiling like the user agent does.
+_MAX_NONCE = 512
+# RFC 7636 §4.2: a S256 challenge is the base64url of a SHA-256, always 43
+# characters. Anything else cannot have come from a correct client.
+_PKCE_CHALLENGE = re.compile(r"[A-Za-z0-9_-]{43}")
 
 
 def _too_many_attempts(account_id: str, pending: dict) -> bool:
@@ -153,7 +162,8 @@ async def discovery():
         "id_token_signing_alg_values_supported": [idp_jwt.ALGORITHM],
         "scopes_supported": ["openid", "profile", "email"],
         "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
-        "claims_supported": ["sub", "email", "email_verified", "preferred_username"],
+        "code_challenge_methods_supported": ["S256"],
+        "claims_supported": ["sub", "email", "email_verified", "preferred_username", "nonce"],
     }
 
 
@@ -171,11 +181,24 @@ async def authorize(
     scope: str = "openid",
     state: str = "",
     login_hint: str | None = None,
+    nonce: str | None = None,
+    code_challenge: str | None = None,
+    code_challenge_method: str | None = None,
 ):
     if client_id != settings.idp_client_id or redirect_uri != settings.idp_client_redirect_uri:
         raise HTTPException(status_code=400, detail="unknown client_id or redirect_uri")
     if response_type != "code":
         raise HTTPException(status_code=400, detail="unsupported_response_type")
+    if nonce is not None and len(nonce) > _MAX_NONCE:
+        raise HTTPException(status_code=400, detail="invalid_request: nonce too long")
+    if code_challenge is not None:
+        # Only S256. `plain` (also the RFC's default when the method is left
+        # out) sends the verifier itself through the browser, which is the very
+        # thing PKCE is there to avoid.
+        if code_challenge_method != "S256":
+            raise HTTPException(status_code=400, detail="invalid_request: only S256 is supported")
+        if not _PKCE_CHALLENGE.fullmatch(code_challenge):
+            raise HTTPException(status_code=400, detail="invalid_request: malformed code_challenge")
 
     request_id = uuid.uuid4().hex
     while len(_pending) >= _MAX_PENDING:
@@ -185,6 +208,8 @@ async def authorize(
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "state": state,
+        "nonce": nonce,
+        "code_challenge": code_challenge,
         "created_at": time.time(),
         "status": "awaiting_email",
         "email": login_hint,
@@ -294,8 +319,14 @@ async def _run_notify_and_wait(request_id: str, targets: list[str]) -> None:
     pending["status"] = "waiting"
     pending["waiting_since"] = time.time()
 
+    # Asked once per login: a resend is the same login, headed for the same app.
+    if "target_app" not in pending:
+        pending["target_app"] = await target_app.resolve(pending["state"])
+    app = pending["target_app"]
+
     geo = geoip.lookup(pending["ip"])
     context = LoginContext(
+        app=app.label() if app else None,
         ip=pending["ip"],
         browser_description=pending["user_agent"],
         geo_city=geo.city,
@@ -453,6 +484,9 @@ async def complete(request_id: str):
     code = uuid.uuid4().hex
     _auth_codes[code] = {
         "client_id": pending["client_id"],
+        "redirect_uri": pending["redirect_uri"],
+        "nonce": pending.get("nonce"),
+        "code_challenge": pending.get("code_challenge"),
         "account_id": pending["account_id"],
         "email": pending["email"],
         "issued_at": time.time(),
@@ -495,6 +529,19 @@ def _parse_basic_auth(header: str | None) -> tuple[str, str] | None:
         return None
 
 
+def _pkce_ok(challenge: str | None, verifier: str | None) -> bool:
+    """RFC 7636 §4.6. No challenge at /authorize means the client is not
+    using PKCE and there is nothing to check; a challenge means the code is
+    worthless without the verifier that hashes to it."""
+    if challenge is None:
+        return True
+    if not verifier:
+        return False
+    digest = hashlib.sha256(verifier.encode("ascii", "replace")).digest()
+    expected = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+    return hmac.compare_digest(expected, challenge)
+
+
 @router.post("/token")
 async def token(
     grant_type: str = Form(...),
@@ -502,6 +549,7 @@ async def token(
     redirect_uri: str | None = Form(None),
     client_id: str | None = Form(None),
     client_secret: str | None = Form(None),
+    code_verifier: str | None = Form(None),
     authorization: str | None = Header(default=None),
 ):
     if grant_type != "authorization_code":
@@ -523,12 +571,21 @@ async def token(
     # whether a code is still good — this is.
     if time.time() - entry["issued_at"] > _AUTH_CODE_TTL_SECONDS:
         raise HTTPException(status_code=400, detail="invalid_grant")
+    # RFC 6749 §4.1.3 asks for the same redirect_uri as /authorize. With a
+    # single configured redirect_uri a mismatch can only be a code being
+    # replayed somewhere it was not issued for. A client that leaves it out is
+    # still accepted: /authorize already pinned the only value it could be.
+    if redirect_uri is not None and redirect_uri != entry["redirect_uri"]:
+        raise HTTPException(status_code=400, detail="invalid_grant")
+    if not _pkce_ok(entry.get("code_challenge"), code_verifier):
+        raise HTTPException(status_code=400, detail="invalid_grant")
 
     id_token = idp_jwt.build_id_token(
         issuer=_issuer(),
         audience=entry["client_id"],
         subject=entry["account_id"],
         email=entry["email"],
+        nonce=entry.get("nonce"),
     )
     access_token = uuid.uuid4().hex
     _access_tokens[access_token] = {

@@ -136,3 +136,17 @@ def test_recovery_warning_low_includes_remaining_count_english():
 def test_recovery_warning_unknown_language_falls_back_to_english():
     notification = recovery_warning_notification("de", remaining=0)
     assert notification["title"] == "Recovery codes exhausted"
+
+
+def test_build_notification_names_the_app_first():
+    text = build_notification("es", {
+        "description": "Chrome, 120.0", "ip": "1.2.3.4", "app": "DIOS (dios.example.com)",
+    })
+    assert text["body"].startswith("App: DIOS (dios.example.com)\nNavegador: Chrome\n")
+
+
+def test_build_notification_without_app_has_no_app_line():
+    for app in (None, ""):
+        text = build_notification("en", {"description": "Chrome, 120.0", "ip": "1.2.3.4", "app": app})
+        assert text["body"].startswith("Browser: Chrome\n")
+        assert "App:" not in text["body"]

@@ -87,6 +87,7 @@ variables:
 | `RECOVERY_CODE_BATCH_SIZE` | `10` | How many recovery codes get generated at once from `/admin/recovery`. |
 | `RECOVERY_CODE_LOW_WARNING` | `3` | Push a warning once this many recovery codes (or fewer) remain. |
 | `GEOIP_ACCOUNT_ID` / `GEOIP_LICENSE_KEY` | *(empty)* | Optional free [MaxMind](https://www.maxmind.com/) account, to add city/country/ISP to both the audit log and the push notification itself. Left empty, that part just stays blank — login still works exactly the same. |
+| `ZITADEL_API_URL` / `ZITADEL_API_CLIENT_ID` / `ZITADEL_API_CLIENT_SECRET` | *(empty)* | Optional, ZITADEL only: name the app being signed in to in the notification (e.g. `App: Grafana (grafana.example.com)`). The login itself never says which app it is for, but ZITADEL records it, and this service can ask. Create a **service user** with a client secret and give it the read-only **`IAM_OWNER_VIEWER`** role (Default settings → Administrators); it only reads ZITADEL's event store. Left empty, or if ZITADEL does not answer within 3 s, the notification simply has no app line. |
 
 A ready-to-use Unraid Community Applications template is included:
 [`ha-login-approval.xml`](ha-login-approval.xml), pointing at the published image
@@ -161,13 +162,17 @@ with no device assigned can never complete a passwordless login, so nothing work
    anything into the loginname field — just click this service's button directly and type the email
    on the next screen. Confirmed that clicking the button with an empty loginname field works fine.
 
-**Keycloak — the button/redirect step has been confirmed live, the full token exchange has not:**
+**Keycloak — a full login confirmed live (Keycloak 26.4), button to token exchange:**
 
 Register a generic **OpenID Connect v1.0** Identity Provider (Realm settings → Identity Providers),
 same Issuer/Client ID/Client secret as above, and set its own display name field too. Confirmed live
 that Keycloak's own external-IDP link on its login screen is a plain server-rendered link
 independent of the username field — same practical implication as ZITADEL: don't bother typing a
 username first, just click the button.
+
+Keycloak sends a `nonce` and expects it back in the `id_token`, so it needs **v2.4.0 or later**;
+earlier versions fail with *"OpenID Provider did not return a nonce"*. PKCE works too: turn on
+**Use PKCE** with method **S256** in the provider's settings.
 
 **Authentik and other generic-OIDC-capable IDPs — not tested, should work by protocol compliance:**
 
@@ -340,6 +345,7 @@ entorno:
 | `RECOVERY_CODE_BATCH_SIZE` | `10` | Cuántos códigos de recuperación se generan de golpe desde `/admin/recovery`. |
 | `RECOVERY_CODE_LOW_WARNING` | `3` | Avisar por push cuando queden este número de códigos o menos. |
 | `GEOIP_ACCOUNT_ID` / `GEOIP_LICENSE_KEY` | *(vacío)* | Cuenta gratuita opcional de [MaxMind](https://www.maxmind.com/), para añadir ciudad/país/operador tanto a la auditoría como a la propia notificación push. Vacío = esa parte queda en blanco, el login sigue funcionando igual. |
+| `ZITADEL_API_URL` / `ZITADEL_API_CLIENT_ID` / `ZITADEL_API_CLIENT_SECRET` | *(vacío)* | Opcional, solo ZITADEL: nombra en la notificación la app en la que se está iniciando sesión (p. ej. `App: Grafana (grafana.example.com)`). El login en sí nunca dice para qué app es, pero ZITADEL lo registra y este servicio puede preguntárselo. Crea un **usuario de servicio** con secreto de cliente y dale el rol de solo lectura **`IAM_OWNER_VIEWER`** (Default settings → Administrators); solo lee el registro de eventos de ZITADEL. Vacío, o si ZITADEL no responde en 3 s, la notificación sale sin la línea de la app. |
 
 Incluye una plantilla lista para Community Applications de Unraid:
 [`ha-login-approval.xml`](ha-login-approval.xml), que apunta a la imagen ya publicada
@@ -417,13 +423,17 @@ login sin contraseña, así que nada funciona por accidente.
    el campo de usuario — pulsa directamente el botón de este servicio y escribe el email en la
    siguiente pantalla. Confirmado que pulsar el botón con el campo vacío funciona sin problema.
 
-**Keycloak — el paso del botón/redirección está confirmado en vivo, el intercambio completo del token no:**
+**Keycloak — un login completo confirmado en vivo (Keycloak 26.4), del botón al intercambio del token:**
 
 Registra un Identity Provider genérico **OpenID Connect v1.0** (Realm settings → Identity
 Providers), mismo Issuer/Client ID/Client secret que arriba, y pon también su propio nombre visible.
 Confirmado en vivo que el propio enlace de IDP externo de Keycloak en su pantalla de login es un
 enlace estático generado por el servidor, independiente del campo de usuario — misma implicación
 práctica que ZITADEL: no hace falta escribir un usuario antes, pulsa directamente el botón.
+
+Keycloak manda un `nonce` y exige que vuelva en el `id_token`, así que necesita la **v2.4.0 o
+posterior**; las anteriores fallan con *"OpenID Provider did not return a nonce"*. PKCE también
+funciona: activa **Use PKCE** con el método **S256** en los ajustes del proveedor.
 
 **Authentik y otros IDP compatibles con OIDC genérico — sin probar, deberían funcionar por cumplir el estándar:**
 

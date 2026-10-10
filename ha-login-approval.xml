@@ -61,4 +61,10 @@ IMPORTANT if you run this behind a reverse proxy (Nginx Proxy Manager, Traefik, 
   <Config Name="MaxMind Account ID (GeoIP, optional)" Target="GEOIP_ACCOUNT_ID" Default="" Mode="" Description="OPTIONAL. A free MaxMind (maxmind.com) account ID, used to download the self-hosted GeoLite2-City/ASN databases and add city/country/ISP to both the audit log and the push notification itself. Left empty, that part of the audit log and notification just stays blank — login still works exactly the same." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
 
   <Config Name="MaxMind License Key (GeoIP, optional)" Target="GEOIP_LICENSE_KEY" Default="" Mode="" Description="OPTIONAL, used together with the Account ID above. The license key generated in your MaxMind account settings." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+
+  <Config Name="ZITADEL URL (app name, optional)" Target="ZITADEL_API_URL" Default="" Mode="" Description="OPTIONAL, ZITADEL only. Your ZITADEL's base URL (e.g. https://sso.example.com), so the approval notification can say which app is being signed in to. Needs the two fields below too. Left empty, the notification simply has no app line." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <Config Name="ZITADEL service user client ID (app name, optional)" Target="ZITADEL_API_CLIENT_ID" Default="" Mode="" Description="OPTIONAL. Client ID of a ZITADEL service user with the read-only IAM_OWNER_VIEWER role. It only reads ZITADEL's event store." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <Config Name="ZITADEL service user client secret (app name, optional)" Target="ZITADEL_API_CLIENT_SECRET" Default="" Mode="" Description="OPTIONAL. Client secret of that same service user." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
 </Container>
