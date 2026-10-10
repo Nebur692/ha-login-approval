@@ -76,7 +76,7 @@ def zitadel(monkeypatch):
     monkeypatch.setattr(settings, "zitadel_api_client_secret", "reader-secret")
     monkeypatch.setattr(target_app, "_token", None)
     monkeypatch.setattr(target_app, "_token_expires_at", 0.0)
-    monkeypatch.setattr(target_app, "_apps_loaded_at", 0.0)
+    monkeypatch.setattr(target_app, "_apps_loaded_at", None)
     monkeypatch.setattr(target_app, "_app_names", {})
     fake = FakeZitadel()
     monkeypatch.setattr(target_app, "_transport", httpx.MockTransport(fake.handler))
@@ -172,3 +172,10 @@ async def test_zitadel_hanging_gives_up_in_time(zitadel, monkeypatch):
     monkeypatch.setattr(target_app, "_transport", Hanging())
     monkeypatch.setattr(target_app, "_LOOKUP_TIMEOUT_SECONDS", 0.05)
     assert await target_app.resolve(STATE) is None
+
+
+async def test_app_list_is_read_on_a_machine_booted_seconds_ago(zitadel, monkeypatch):
+    """The monotonic clock starts near zero at boot (a fresh CI runner, a NAS
+    that just restarted). The first lookup must still read the app list."""
+    monkeypatch.setattr(target_app, "_clock", lambda: 5.0)
+    assert (await target_app.resolve(STATE)).name == "Admin portal"

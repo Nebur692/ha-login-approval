@@ -28,6 +28,9 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+_clock = time.monotonic
+"""The module's own clock, so a test can move it without moving asyncio's."""
+
 _LOOKUP_TIMEOUT_SECONDS = 3.0
 _APPS_REFRESH_MIN_INTERVAL_SECONDS = 60
 _MAX_NAME = 80
@@ -57,7 +60,10 @@ class TargetApp:
 _token: str | None = None
 _token_expires_at = 0.0
 _app_names: dict[str, str] = {}
-_apps_loaded_at = 0.0
+_apps_loaded_at: float | None = None
+"""When the app list was last read; None until the first time. Not 0.0: the
+monotonic clock counts from boot, so on a machine up for under a minute a
+list "loaded at 0" would look fresh and never be read at all."""
 # Tests swap in an httpx.MockTransport that answers like ZITADEL does.
 _transport: httpx.AsyncBaseTransport | None = None
 
@@ -131,13 +137,14 @@ async def _app_name(client: httpx.AsyncClient, client_id: str) -> str | None:
     more than once a minute, or an unknown client_id would mean a reload per
     login."""
     global _apps_loaded_at
-    if client_id not in _app_names and time.monotonic() - _apps_loaded_at > _APPS_REFRESH_MIN_INTERVAL_SECONDS:
+    stale = _apps_loaded_at is None or _clock() - _apps_loaded_at > _APPS_REFRESH_MIN_INTERVAL_SECONDS
+    if client_id not in _app_names and stale:
         events = await _search_events(client, {
             "aggregateTypes": ["project"], "eventTypes": _APP_EVENT_TYPES, "limit": 1000, "asc": True,
         })
         _app_names.clear()
         _app_names.update(_names_by_client_id(events))
-        _apps_loaded_at = time.monotonic()
+        _apps_loaded_at = _clock()
     return _app_names.get(client_id)
 
 
@@ -174,7 +181,7 @@ async def _search_events(client: httpx.AsyncClient, query: dict) -> list[dict]:
 
 async def _access_token(client: httpx.AsyncClient) -> str:
     global _token, _token_expires_at
-    if _token and time.monotonic() < _token_expires_at:
+    if _token and _clock() < _token_expires_at:
         return _token
     response = await client.post(
         f"{_base_url()}/oauth/v2/token",
@@ -185,5 +192,5 @@ async def _access_token(client: httpx.AsyncClient) -> str:
     body = response.json()
     _token = body["access_token"]
     # Renewed a minute early, so a token never expires between check and use.
-    _token_expires_at = time.monotonic() + max(int(body.get("expires_in", 300)) - 60, 30)
+    _token_expires_at = _clock() + max(int(body.get("expires_in", 300)) - 60, 30)
     return _token
