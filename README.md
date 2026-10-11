@@ -91,7 +91,7 @@ variables:
 | `ZITADEL_API_URL` / `ZITADEL_API_CLIENT_ID` / `ZITADEL_API_CLIENT_SECRET` | *(empty)* | Optional, ZITADEL only: name the app being signed in to in the notification (e.g. `App: Grafana (grafana.example.com)`). The login itself never says which app it is for, but ZITADEL records it, and this service can ask. Create a **service user** with a client secret and give it the read-only **`IAM_OWNER_VIEWER`** role (Default settings → Administrators); it only reads ZITADEL's event store. Left empty, or if ZITADEL does not answer within 3 s, the notification simply has no app line. **With Keycloak nothing needs configuring**: the app's address (not its name) is read from the request Keycloak itself sends. |
 
 A ready-to-use Unraid Community Applications template is included:
-[`ha-login-approval.xml`](ha-login-approval.xml), pointing at the published image
+[`ha-login-approval.xml`](https://github.com/Nebur692/unraid-community-apps/blob/main/templates/ha-login-approval.xml), pointing at the published image
 `ghcr.io/nebur692/ha-login-approval:latest`. It also mounts a **persistent volume at `/data`** —
 this holds the SQLite database (accounts, recovery codes, audit log, IP blocks, branding) and the
 optional GeoIP files; without it, everything resets when the container is recreated.
@@ -356,7 +356,7 @@ entorno:
 | `ZITADEL_API_URL` / `ZITADEL_API_CLIENT_ID` / `ZITADEL_API_CLIENT_SECRET` | *(vacío)* | Opcional, solo ZITADEL: nombra en la notificación la app en la que se está iniciando sesión (p. ej. `App: Grafana (grafana.example.com)`). El login en sí nunca dice para qué app es, pero ZITADEL lo registra y este servicio puede preguntárselo. Crea un **usuario de servicio** con secreto de cliente y dale el rol de solo lectura **`IAM_OWNER_VIEWER`** (Default settings → Administrators); solo lee el registro de eventos de ZITADEL. Vacío, o si ZITADEL no responde en 3 s, la notificación sale sin la línea de la app. **Con Keycloak no hace falta configurar nada**: la dirección de la app (no su nombre) se lee de la propia petición que manda Keycloak. |
 
 Incluye una plantilla lista para Community Applications de Unraid:
-[`ha-login-approval.xml`](ha-login-approval.xml), que apunta a la imagen ya publicada
+[`ha-login-approval.xml`](https://github.com/Nebur692/unraid-community-apps/blob/main/templates/ha-login-approval.xml), que apunta a la imagen ya publicada
 `ghcr.io/nebur692/ha-login-approval:latest`. También monta un **volumen persistente en `/data`** —
 ahí vive la base de datos SQLite (cuentas, códigos de recuperación, auditoría, bloqueos de IP,
 personalización) y los ficheros de GeoIP opcionales; sin él, todo se reinicia al recrear el
