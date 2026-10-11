@@ -8,7 +8,7 @@ import logging
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
-from app import accounts, admin_sessions, burburito, client_ip, ha_client
+from app import accounts, admin_i18n, admin_sessions, burburito, client_ip, ha_client
 from app.db import get_db
 from app.routers.admin._auth import require_admin
 
@@ -37,7 +37,7 @@ async def accounts_page(request: Request, _: str = Depends(require_admin)):
         "active": "accounts",
         "mobile_targets": mobile_targets,
         "ha_reachable": ha_reachable,
-        "burburito": None if ha_reachable else burburito.footer("panel/ver-pantalla/error-remoto"),
+        "burburito": None if ha_reachable else burburito.footer("panel/ver-pantalla/error-remoto", admin_i18n.lang_for(request)),
         "rows": rows,
     })
 
@@ -47,8 +47,15 @@ async def save_account(
     request: Request,
     email: str = Form(...),
     targets: list[str] = Form(default=[]),
+    shown: list[str] = Form(default=[]),
     admin_user: str = Depends(require_admin),
 ):
+    # The form only speaks for the devices it showed: one assigned to this
+    # account but not on the form (a page from before it was assigned, say)
+    # keeps its place instead of being dropped by a save nobody meant for it.
+    current = await accounts.get_targets(get_db(), email)
+    kept = [target for target in current if target not in shown]
+    targets = sorted(set(targets) | set(kept))
     await accounts.set_targets(get_db(), email, targets)
     await admin_sessions.record(
         "account_saved", username=admin_user, ip=client_ip.resolve(request),

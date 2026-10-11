@@ -95,7 +95,7 @@ _MAX_PENDING = 500
 _MAX_NONCE = 512
 # A failed sign-in stays on screen this long, so its message and burburito code
 # can be read, before the page goes back to the relying party on its own.
-_AUTO_RETURN_SECONDS = 10
+_AUTO_RETURN_SECONDS = 3
 # RFC 7636 §4.2: a S256 challenge is the base64url of a SHA-256, always 43
 # characters. Anything else cannot have come from a correct client.
 _PKCE_CHALLENGE = re.compile(r"[A-Za-z0-9_-]{43}")

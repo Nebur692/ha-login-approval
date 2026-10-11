@@ -1,20 +1,20 @@
 {% extends "admin/base.html" %}
-{% block title %}Home{% endblock %}
+{% block title %}{{ t.home_title }}{% endblock %}
 {% block content %}
-<h1>At a glance</h1>
+<h1>{{ t.home_heading }}</h1>
 
 <div class="card">
-  <p>{{ total_accounts }} account(s), {{ accounts_with_devices }} with at least one device assigned.</p>
-  <p>{{ blocked_count }} IP(s) currently blocked{% if blocked_count %} — <a href="/admin/blocked-ips">review</a>{% endif %}.</p>
+  <p>{{ t.home_accounts.format(total=total_accounts, with_devices=accounts_with_devices) }}</p>
+  <p>{{ t.home_blocked.format(n=blocked_count) }}{% if blocked_count %} — <a href="/admin/blocked-ips">{{ t.review }}</a>{% endif %}.</p>
 </div>
 
 <div class="card">
-  <h2>Recovery codes remaining</h2>
+  <h2>{{ t.home_recovery }}</h2>
   {% if not recovery_summary %}
-    <p class="empty">No account has any recovery codes generated yet.</p>
+    <p class="empty">{{ t.home_recovery_none }}</p>
   {% else %}
   <table>
-    <tr><th>Account</th><th>Remaining</th></tr>
+    <tr><th>{{ t.account }}</th><th>{{ t.remaining }}</th></tr>
     {% for row in recovery_summary %}
     <tr>
       <td>{{ row.display_name }}</td>

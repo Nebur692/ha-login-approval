@@ -120,10 +120,12 @@ async def test_old_failures_no_longer_count(client, ready):
     assert (await client.post("/admin/login", data=GOOD)).status_code == 303
 
 
-async def test_failures_from_many_addresses_lock_everyone(client, ready):
-    for i in range(admin_sessions.FAILURES_OVERALL):
+async def test_failures_from_many_addresses_do_not_lock_anyone_else(client, ready):
+    """Only per address: an overall limit would let anyone with enough
+    addresses keep the owner out of the panel."""
+    for i in range(200):
         await admin_sessions.record(admin_sessions.LOGIN_FAILED, username="admin", ip=f"198.51.100.{i}")
-    assert (await client.post("/admin/login", data=GOOD)).status_code == 429
+    assert (await client.post("/admin/login", data=GOOD)).status_code == 303
 
 
 @pytest.mark.parametrize("weak", ["short1234", "changeme", "Password", "", "admin"])
@@ -170,7 +172,7 @@ async def test_changes_are_recorded_with_who_and_what(client, ready, monkeypatch
     saved = (await _events("account_saved"))[0]
     assert saved["username"] == "admin" and saved["detail"] == "bob@example.com: mobile_app_x"
     page = await client.get("/admin/activity")
-    assert "account_saved" in page.text and "bob@example.com: mobile_app_x" in page.text
+    assert "account saved" in page.text and "bob@example.com: mobile_app_x" in page.text
 
 
 async def test_ending_another_session_from_the_activity_page(client, ready, monkeypatch):

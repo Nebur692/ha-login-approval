@@ -1,23 +1,23 @@
 {% extends "admin/base.html" %}
-{% from "admin/_burburito.html" import error_box %}
-{% block title %}Sign in{% endblock %}
+{% from "admin/_burburito.html" import error_box with context %}
+{% block title %}{{ t.login_title }}{% endblock %}
 {% block content %}
-<h1>Admin panel</h1>
+<h1>{{ t.login_heading }}</h1>
 
-{% if password_problem %}
-{{ error_box("The admin panel is turned off: " ~ password_problem ~ " Set ADMIN_PASSWORD to something at least 12 characters long and recreate the container. Sign-ins through this service keep working meanwhile — only this panel is off.", burburito) }}
+{% if weakness %}
+{{ error_box(t.panel_off.format(problem=t["pw_" ~ weakness].format(n=12)), burburito) }}
 {% else %}
-{% if error %}{{ error_box(error, burburito) }}{% endif %}
+{% if error_key %}{{ error_box(t[error_key], burburito) }}{% endif %}
 <div class="card narrow">
   <form method="post" action="/admin/login">
     <input type="hidden" name="next" value="{{ next }}">
-    <label class="field">Username
+    <label class="field">{{ t.username }}
       <input type="text" name="username" autocomplete="username" required autofocus class="full-width">
     </label>
-    <label class="field">Password
+    <label class="field">{{ t.password }}
       <input type="password" name="password" autocomplete="current-password" required class="full-width">
     </label>
-    <button type="submit">Sign in</button>
+    <button type="submit">{{ t.sign_in }}</button>
   </form>
 </div>
 {% endif %}

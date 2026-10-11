@@ -88,7 +88,7 @@ variables:
 | `RECOVERY_CODE_BATCH_SIZE` | `10` | How many recovery codes get generated at once from `/admin/recovery`. |
 | `RECOVERY_CODE_LOW_WARNING` | `3` | Push a warning once this many recovery codes (or fewer) remain. |
 | `GEOIP_ACCOUNT_ID` / `GEOIP_LICENSE_KEY` | *(empty)* | Optional free [MaxMind](https://www.maxmind.com/) account, to add city/country/ISP to both the audit log and the push notification itself. Left empty, that part just stays blank — login still works exactly the same. |
-| `ZITADEL_API_URL` / `ZITADEL_API_CLIENT_ID` / `ZITADEL_API_CLIENT_SECRET` | *(empty)* | Optional, ZITADEL only: name the app being signed in to in the notification (e.g. `App: Grafana (grafana.example.com)`). The login itself never says which app it is for, but ZITADEL records it, and this service can ask. Create a **service user** with a client secret and give it the read-only **`IAM_OWNER_VIEWER`** role (Default settings → Administrators); it only reads ZITADEL's event store. Left empty, or if ZITADEL does not answer within 3 s, the notification simply has no app line. |
+| `ZITADEL_API_URL` / `ZITADEL_API_CLIENT_ID` / `ZITADEL_API_CLIENT_SECRET` | *(empty)* | Optional, ZITADEL only: name the app being signed in to in the notification (e.g. `App: Grafana (grafana.example.com)`). The login itself never says which app it is for, but ZITADEL records it, and this service can ask. Create a **service user** with a client secret and give it the read-only **`IAM_OWNER_VIEWER`** role (Default settings → Administrators); it only reads ZITADEL's event store. Left empty, or if ZITADEL does not answer within 3 s, the notification simply has no app line. **With Keycloak nothing needs configuring**: the app's address (not its name) is read from the request Keycloak itself sends. |
 
 A ready-to-use Unraid Community Applications template is included:
 [`ha-login-approval.xml`](ha-login-approval.xml), pointing at the published image
@@ -186,12 +186,12 @@ didn't is very welcome.
 
 ### 🧑‍💻 Admin panel tour
 
-All under `/admin`. You sign in with `ADMIN_USERNAME`/`ADMIN_PASSWORD` on a sign-in page; the session ends after 30 minutes without use or 8 hours after signing in, and **Sign out** ends it at once. Five wrong passwords from one address lock that address out for 15 minutes.
+All under `/admin`. You sign in with `ADMIN_USERNAME`/`ADMIN_PASSWORD` on a sign-in page; the session ends after 30 minutes without use or 8 hours after signing in, and **Sign out** ends it at once. Five wrong passwords from one address lock that address out for 15 minutes. The panel speaks Spanish (Spain) or English, following the browser's language.
 
 | Section | What it's for |
 |---|---|
 | **Home** | At-a-glance: total accounts, how many have devices assigned, recovery codes running low, currently blocked IPs. |
-| **Accounts** | Add an email, tick which devices get notified for it. This is the only account model the service uses — independent of any IDP. |
+| **Accounts** | Add an email, tick which devices get notified for it. This is the only account model the service uses — independent of any IDP. A device assigned to an account but missing from Home Assistant right now is still listed and kept, unless you untick it. |
 | **Audit** | Per-account history: approved / rejected / timed out / recovery code used / send failed, with timestamp, IP, browser, and (if GeoIP is configured) city/country/ISP. |
 | **Recovery codes** | Generate or regenerate a batch per account — shown once, then never retrievable again. Regenerating instantly invalidates every code from the previous batch. |
 | **Blocked IPs** | See who's currently blocked and unblock manually — important if three accidental rejects (or mistyped codes) lock out the real account owner. |
@@ -353,7 +353,7 @@ entorno:
 | `RECOVERY_CODE_BATCH_SIZE` | `10` | Cuántos códigos de recuperación se generan de golpe desde `/admin/recovery`. |
 | `RECOVERY_CODE_LOW_WARNING` | `3` | Avisar por push cuando queden este número de códigos o menos. |
 | `GEOIP_ACCOUNT_ID` / `GEOIP_LICENSE_KEY` | *(vacío)* | Cuenta gratuita opcional de [MaxMind](https://www.maxmind.com/), para añadir ciudad/país/operador tanto a la auditoría como a la propia notificación push. Vacío = esa parte queda en blanco, el login sigue funcionando igual. |
-| `ZITADEL_API_URL` / `ZITADEL_API_CLIENT_ID` / `ZITADEL_API_CLIENT_SECRET` | *(vacío)* | Opcional, solo ZITADEL: nombra en la notificación la app en la que se está iniciando sesión (p. ej. `App: Grafana (grafana.example.com)`). El login en sí nunca dice para qué app es, pero ZITADEL lo registra y este servicio puede preguntárselo. Crea un **usuario de servicio** con secreto de cliente y dale el rol de solo lectura **`IAM_OWNER_VIEWER`** (Default settings → Administrators); solo lee el registro de eventos de ZITADEL. Vacío, o si ZITADEL no responde en 3 s, la notificación sale sin la línea de la app. |
+| `ZITADEL_API_URL` / `ZITADEL_API_CLIENT_ID` / `ZITADEL_API_CLIENT_SECRET` | *(vacío)* | Opcional, solo ZITADEL: nombra en la notificación la app en la que se está iniciando sesión (p. ej. `App: Grafana (grafana.example.com)`). El login en sí nunca dice para qué app es, pero ZITADEL lo registra y este servicio puede preguntárselo. Crea un **usuario de servicio** con secreto de cliente y dale el rol de solo lectura **`IAM_OWNER_VIEWER`** (Default settings → Administrators); solo lee el registro de eventos de ZITADEL. Vacío, o si ZITADEL no responde en 3 s, la notificación sale sin la línea de la app. **Con Keycloak no hace falta configurar nada**: la dirección de la app (no su nombre) se lee de la propia petición que manda Keycloak. |
 
 Incluye una plantilla lista para Community Applications de Unraid:
 [`ha-login-approval.xml`](ha-login-approval.xml), que apunta a la imagen ya publicada
@@ -455,12 +455,12 @@ bienvenido.
 
 ### 🧑‍💻 Recorrido por el panel de administración
 
-Todo bajo `/admin`. Se entra con `ADMIN_USERNAME`/`ADMIN_PASSWORD` en una página de acceso; la sesión termina tras 30 minutos sin uso u 8 horas después de entrar, y **Sign out** la cierra al momento. Cinco contraseñas erróneas desde una dirección la bloquean 15 minutos.
+Todo bajo `/admin`. Se entra con `ADMIN_USERNAME`/`ADMIN_PASSWORD` en una página de acceso; la sesión termina tras 30 minutos sin uso u 8 horas después de entrar, y **Sign out** la cierra al momento. Cinco contraseñas erróneas desde una dirección la bloquean 15 minutos. El panel habla español de España o inglés, según el idioma del navegador.
 
 | Sección | Para qué sirve |
 |---|---|
 | **Home** | De un vistazo: cuentas totales, cuántas tienen dispositivo asignado, códigos de recuperación bajos, IPs bloqueadas ahora mismo. |
-| **Accounts** | Añade un email, marca qué dispositivos se notifican. Es el único modelo de cuentas que usa el servicio; independiente de cualquier IDP. |
+| **Accounts** | Añade un email, marca qué dispositivos se notifican. Es el único modelo de cuentas que usa el servicio; independiente de cualquier IDP. Un dispositivo asignado a una cuenta que ahora mismo no aparece en Home Assistant se sigue mostrando y se conserva, salvo que lo desmarques. |
 | **Audit** | Historial por cuenta: aprobado / rechazado / timeout / código de recuperación usado / envío fallido, con fecha, IP, navegador y (si GeoIP está configurado) ciudad/país/operador. |
 | **Recovery codes** | Generar o regenerar un lote por cuenta — se muestran una sola vez, luego nunca se pueden recuperar. Regenerar invalida al instante todos los códigos del lote anterior. |
 | **Blocked IPs** | Ver quién está bloqueado ahora mismo y desbloquear manualmente — importante si tres rechazos accidentales (o códigos mal tecleados) dejan fuera al dueño real de la cuenta. |

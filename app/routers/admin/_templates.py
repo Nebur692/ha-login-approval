@@ -1,9 +1,21 @@
-"""Shared Jinja2Templates instance for every /admin/* page."""
+"""Shared Jinja2Templates instance for every /admin/* page.
+
+Every page also gets `lang` and `t`, the panel's words in the browser's
+language (app/admin_i18n.py)."""
 from datetime import datetime
 
+from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
-templates = Jinja2Templates(directory="templates")
+from app import admin_i18n
+
+
+def _i18n(request: Request) -> dict:
+    lang = admin_i18n.lang_for(request)
+    return {"lang": lang, "t": admin_i18n.STRINGS[lang]}
+
+
+templates = Jinja2Templates(directory="templates", context_processors=[_i18n])
 
 
 def _local_datetime(value: str) -> str:

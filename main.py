@@ -76,12 +76,11 @@ app.add_middleware(SecurityHeadersMiddleware)
 async def admin_refused(request, exc: AdminRefused):
     # A page, not JSON: whoever submitted the form is a person, and the
     # burburito code at the bottom is what they pass on if it keeps happening.
-    from app import burburito
+    from app import admin_i18n, burburito
     return admin_templates.TemplateResponse(request, "admin/refused.html", {
-        "message": exc.message,
-        "burburito": burburito.footer(exc.key),
-        "back": "/admin" if exc.signed_in else "/admin/login",
-        "back_label": "Back to the panel" if exc.signed_in else "Sign in again",
+        "message_key": exc.message_key,
+        "burburito": burburito.footer(exc.key, admin_i18n.lang_for(request)),
+        "signed_in": exc.signed_in,
     }, status_code=403)
 app.include_router(admin.router)
 app.include_router(idp.router)

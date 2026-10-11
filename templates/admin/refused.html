@@ -1,8 +1,8 @@
 {% extends "admin/base.html" %}
-{% from "admin/_burburito.html" import error_box %}
-{% block title %}Not saved{% endblock %}
+{% from "admin/_burburito.html" import error_box with context %}
+{% block title %}{{ t.refused_title }}{% endblock %}
 {% block content %}
-<h1>Nothing was changed</h1>
-{{ error_box(message, burburito) }}
-<p><a href="{{ back }}">{{ back_label }}</a></p>
+<h1>{{ t.refused_heading }}</h1>
+{{ error_box(t[message_key], burburito) }}
+{% if signed_in %}<p><a href="/admin">{{ t.back_to_panel }}</a></p>{% else %}<p><a href="/admin/login">{{ t.sign_in_again }}</a></p>{% endif %}
 {% endblock %}

@@ -179,3 +179,43 @@ async def test_app_list_is_read_on_a_machine_booted_seconds_ago(zitadel, monkeyp
     that just restarted). The first lookup must still read the app list."""
     monkeypatch.setattr(target_app, "_clock", lambda: 5.0)
     assert (await target_app.resolve(STATE)).name == "Admin portal"
+
+
+# The `state` a real Keycloak 26.4 sent this service's /authorize on
+# 2026-10-10, for an app whose redirect_uri was http://app.prueba/cb.
+KEYCLOAK_STATE = (
+    "r9vlE37WxJFaSHYn7ZmHNNAhvF9ir0UgOGodUkzVf0Y.dgYhkHhuU6M.09STeEdLTLSf_r-Y6oyEgg."
+    "eyJydSI6Imh0dHA6Ly9hcHAucHJ1ZWJhL2NiIiwicnQiOiJjb2RlIiwic3QiOiJlc3RhZG8tYXBwIn0"
+)
+
+
+async def test_keycloak_state_names_the_apps_host_with_no_credentials(monkeypatch):
+    monkeypatch.setattr(settings, "zitadel_api_url", "")
+    app = await target_app.resolve(KEYCLOAK_STATE)
+    assert app == target_app.TargetApp(name=None, host="app.prueba")
+    assert app.label() == "app.prueba"
+
+
+async def test_keycloak_state_is_read_without_asking_zitadel(zitadel):
+    await target_app.resolve(KEYCLOAK_STATE)
+    assert zitadel.calls == []
+
+
+def _kc(client_data: str) -> str:
+    return "a.b.c." + client_data
+
+
+@pytest.mark.parametrize("state", [
+    "a.b.c",                                     # too few parts
+    _kc("!!!not-base64!!!"),                     # not base64
+    _kc("bm90IGpzb24"),                          # base64 of "not json"
+    _kc("eyJydCI6ImNvZGUifQ"),                   # {"rt":"code"}: no "ru"
+    _kc("eyJydSI6Im15YXBwOi9jYiJ9"),             # {"ru":"myapp:/cb"}: no host
+    _kc("eyJydSI6MTJ9"),                         # {"ru":12}
+    _kc("W10"),                                  # []
+    _kc("e" * 5000),                             # far longer than Keycloak's
+    "xyz",                                       # what most tests send
+])
+async def test_anything_else_is_not_a_keycloak_state(state, monkeypatch):
+    monkeypatch.setattr(settings, "zitadel_api_url", "")
+    assert await target_app.resolve(state) is None

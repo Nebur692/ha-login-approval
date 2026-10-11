@@ -11,11 +11,16 @@ request it belongs to, and the request records the app's client_id and
 redirect_uri. Three reads of its event store, all made before the person is
 notified, since all three events exist before ZITADEL sends anyone here.
 
-Entirely optional: without ZITADEL credentials `resolve()` returns None and the
+Keycloak needs no asking: it carries the app's own redirect_uri inside the
+`state` itself (see _from_keycloak_state), so its host is read straight off it.
+
+Entirely optional: with neither, `resolve()` returns None and the
 notification simply has no app line. Any failure does the same — this is a
 nicety on a message, and must never delay or break a login.
 """
 import asyncio
+import base64
+import json
 import logging
 import re
 import time
@@ -34,6 +39,8 @@ _clock = time.monotonic
 _LOOKUP_TIMEOUT_SECONDS = 3.0
 _APPS_REFRESH_MIN_INTERVAL_SECONDS = 60
 _MAX_NAME = 80
+# Keycloak's client data is a few hundred bytes; a longer one is not that.
+_MAX_KEYCLOAK_CLIENT_DATA = 4096
 # ZITADEL IDs are decimal. A `state` that isn't one did not come from ZITADEL,
 # so there is nothing to ask it about.
 _ZITADEL_ID = re.compile(r"[0-9]{1,32}")
@@ -73,6 +80,9 @@ def is_configured() -> bool:
 
 
 async def resolve(state: str) -> TargetApp | None:
+    keycloak = _from_keycloak_state(state)
+    if keycloak is not None:
+        return keycloak
     if not is_configured() or not _ZITADEL_ID.fullmatch(state or ""):
         return None
     try:
@@ -80,6 +90,24 @@ async def resolve(state: str) -> TargetApp | None:
     except Exception as exc:
         logger.warning("Could not find out which app this login is for: %s", exc or type(exc).__name__)
         return None
+
+
+def _from_keycloak_state(state: str) -> TargetApp | None:
+    """Keycloak (checked with 26.4) packs the app's own redirect_uri into the
+    `state` it sends an external IdP: dot-separated parts, the last a base64url
+    JSON like {"ru": "https://app.example.com/cb", "rt": "code", "st": "…"}.
+    Only the host comes out of it — the app's name stays in Keycloak — but it
+    needs no credentials and no request. Anything else is simply not this."""
+    parts = (state or "").split(".")
+    if len(parts) < 4 or len(parts[-1]) > _MAX_KEYCLOAK_CLIENT_DATA:
+        return None
+    try:
+        raw = parts[-1] + "=" * (-len(parts[-1]) % 4)
+        data = json.loads(base64.urlsafe_b64decode(raw))
+        host = urlparse(data["ru"]).hostname if isinstance(data, dict) and isinstance(data.get("ru"), str) else None
+    except Exception:
+        return None
+    return TargetApp(name=None, host=host) if host else None
 
 
 def _base_url() -> str:

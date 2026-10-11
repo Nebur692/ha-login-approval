@@ -5,7 +5,7 @@ import time
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
-from app import admin_sessions, burburito, client_ip
+from app import admin_i18n, admin_sessions, burburito, client_ip
 from app.routers.admin._auth import cookie_name, require_admin, secure_cookies
 from app.routers.admin._templates import templates
 
@@ -24,15 +24,15 @@ def _safe_next(next_path: str) -> str:
     return "/admin"
 
 
-def _login_page(request: Request, next_path: str, error: str | None, status_code: int = 200, key: str | None = None):
-    weak = admin_sessions.password_problem()
-    if weak:
+def _login_page(request: Request, next_path: str, error_key: str | None, status_code: int = 200, key: str | None = None):
+    weakness = admin_sessions.password_weakness()
+    if weakness:
         key = "panel/iniciar-sesion/config-invalida"
     return templates.TemplateResponse(request, "admin/login.html", {
         "next": _safe_next(next_path),
-        "error": error,
-        "password_problem": weak,
-        "burburito": burburito.footer(key) if key else None,
+        "error_key": error_key,
+        "weakness": weakness,
+        "burburito": burburito.footer(key, admin_i18n.lang_for(request)) if key else None,
     }, status_code=status_code)
 
 
@@ -57,13 +57,13 @@ async def login(
         if await admin_sessions.too_many_failures(ip):
             await admin_sessions.record(admin_sessions.LOGIN_REFUSED, username=username, ip=ip, detail="too many failures")
             return _login_page(
-                request, next, "Too many failed attempts. Try again in 15 minutes.", status_code=429,
+                request, next, "login_locked", status_code=429,
                 key="panel/iniciar-sesion/limite-propio",
             )
         if not admin_sessions.credentials_match(username, password):
             await admin_sessions.record(admin_sessions.LOGIN_FAILED, username=username, ip=ip)
             return _login_page(
-                request, next, "Wrong username or password.", status_code=401,
+                request, next, "login_wrong", status_code=401,
                 key="panel/iniciar-sesion/credencial-invalida",
             )
 

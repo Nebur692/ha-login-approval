@@ -1,33 +1,30 @@
 {% extends "admin/base.html" %}
-{% block title %}Signing key{% endblock %}
+{% block title %}{{ t.key_title }}{% endblock %}
 {% block content %}
-<h1>Signing key</h1>
-<p class="muted">The key that signs every id_token this service issues. Relying parties find it
-   in <code>/jwks.json</code> and pick up a new one on their own.</p>
+<h1>{{ t.key_heading }}</h1>
+<p class="muted">{{ t.key_intro }}</p>
 
 <table>
-  <tr><th>Key ID</th><th>Created</th><th>State</th></tr>
+  <tr><th>{{ t.key_id }}</th><th>{{ t.created }}</th><th>{{ t.state }}</th></tr>
   {% for key in keys %}
   <tr>
     <td><code>{{ key.kid }}</code></td>
     <td>{{ key.created_at[:19] | replace("T", " ") }} UTC</td>
-    <td>{% if key.active %}signing{% else %}retired {{ key.retired_at[:19] | replace("T", " ") }} UTC — still verifies until the overlap ends{% endif %}</td>
+    <td>{% if key.active %}{{ t.signing }}{% else %}{{ t.retired.format(at=key.retired_at[:19] | replace("T", " ")) }}{% endif %}</td>
   </tr>
   {% endfor %}
 </table>
 
 <div class="card">
-  <h2>Rotate</h2>
-  <p>A new key starts signing straight away. The current one keeps verifying for
-     {{ overlap_minutes }} minutes, then is deleted.</p>
+  <h2>{{ t.rotate_heading }}</h2>
+  <p>{{ t.rotate_intro.format(minutes=overlap_minutes) }}</p>
   <form method="post" action="/admin/signing-key/rotate">
     <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
     <label class="target-label">
       <input type="checkbox" name="discard_old" value="yes">
-      Delete the current key now instead — if it may have leaked. A login completing at that
-      exact moment fails and has to be retried.
+      {{ t.rotate_discard }}
     </label>
-    <button type="submit">Rotate signing key</button>
+    <button type="submit">{{ t.rotate_button }}</button>
   </form>
 </div>
 {% endblock %}

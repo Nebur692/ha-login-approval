@@ -1,7 +1,7 @@
 {% extends "admin/base.html" %}
-{% block title %}Audit{% endblock %}
+{% block title %}{{ t.audit_title }}{% endblock %}
 {% block content %}
-<h1>Login attempt history</h1>
+<h1>{{ t.audit_heading }}</h1>
 
 <form method="get" action="/admin/audit">
   <select name="account_id" id="account-select">
@@ -12,14 +12,14 @@
 </form>
 
 {% if not events %}
-  <p class="empty">No login attempts recorded for this account yet.</p>
+  <p class="empty">{{ t.audit_none }}</p>
 {% else %}
 <table>
-  <tr><th>When</th><th>Result</th><th>IP</th><th>Browser</th><th>Location</th></tr>
+  <tr><th>{{ t.when }}</th><th>{{ t.result }}</th><th>IP</th><th>{{ t.browser }}</th><th>{{ t.location }}</th></tr>
   {% for e in events %}
   <tr>
     <td>{{ e.occurred_at | local_datetime }}</td>
-    <td>{{ e.event_type }}</td>
+    <td>{{ t.audit_events.get(e.event_type, e.event_type) }}</td>
     <td>{{ e.ip or "" }}</td>
     <td>{{ e.user_agent or "" }}</td>
     <td>{{ [e.geo_city, e.geo_country, e.geo_asn_org] | select | join(", ") }}</td>

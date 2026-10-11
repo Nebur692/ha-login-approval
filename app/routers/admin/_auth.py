@@ -19,10 +19,10 @@ class AdminRefused(Exception):
     """A change refused before it happened — shown as a page with its
     burburito code (see main.py), not as a bare JSON error."""
 
-    def __init__(self, key: str, message: str, *, signed_in: bool):
-        super().__init__(message)
+    def __init__(self, key: str, message_key: str, *, signed_in: bool):
+        super().__init__(message_key)
         self.key = key
-        self.message = message
+        self.message_key = message_key
         self.signed_in = signed_in
 
 
@@ -47,7 +47,7 @@ async def require_admin(request: Request) -> str:
             )
         raise AdminRefused(
             "panel/cambiar-ajustes/sesion-cerrada",
-            "Your session had ended (30 minutes without use, 8 hours since signing in, or signed out from Activity), so this change was not saved.",
+            "refused_session",
             signed_in=False,
         )
 
@@ -57,7 +57,7 @@ async def require_admin(request: Request) -> str:
         if not isinstance(sent, str) or not secrets.compare_digest(sent, session["csrf_token"]):
             raise AdminRefused(
                 "panel/cambiar-ajustes/no-autorizado",
-                "This form did not carry your session's security token — usually a page left open from before you signed in again — so the change was not saved.",
+                "refused_csrf",
                 signed_in=True,
             )
 

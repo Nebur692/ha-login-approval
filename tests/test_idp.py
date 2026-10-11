@@ -1207,7 +1207,7 @@ async def test_the_bridge_page_carries_every_problem_in_the_readers_language(cli
                              "recovery_invalid", "recovery_not_yet", "offline", "bad_client", "bad_request"}
     assert problems["denied"]["code"] == "003-002-001-046"
     assert problems["denied"]["label"] == "Burburito code"
-    assert "const AUTO_RETURN_SECONDS = 10;" in resp.text
+    assert "const AUTO_RETURN_SECONDS = 3;" in resp.text
 
 
 async def test_the_page_script_handles_every_status_the_server_can_report():

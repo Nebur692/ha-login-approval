@@ -46,7 +46,7 @@
       "severidad": "aviso",
       "actuar": false,
       "titulo": "Demasiados intentos fallidos: acceso al panel en pausa",
-      "explicacion": "5 contraseñas erróneas desde esa dirección, o 50 en total, en 15 minutos. Mientras dure, se rechaza incluso la contraseña buena.",
+      "explicacion": "5 contraseñas erróneas desde esa dirección en 15 minutos. Mientras dure, esa dirección no puede entrar y se rechaza incluso la contraseña buena.",
       "que_hacer": "Esperar 15 minutos. Al entrar, mirar en Activity de dónde vinieron los fallos.",
       "origen": "app/admin_sessions.py too_many_failures"
     },

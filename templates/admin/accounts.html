@@ -1,14 +1,12 @@
 {% extends "admin/base.html" %}
-{% from "admin/_burburito.html" import error_box %}
-{% block title %}Accounts{% endblock %}
+{% from "admin/_burburito.html" import error_box with context %}
+{% block title %}{{ t.accounts_title }}{% endblock %}
 {% block content %}
-<h1>Passwordless accounts</h1>
-<p class="muted">Accounts used by the passwordless OIDC flow — independent of any relying party
-   (ZITADEL, Keycloak, Authentik, ...). An account with no device checked can never complete a
-   passwordless login.</p>
+<h1>{{ t.accounts_heading }}</h1>
+<p class="muted">{{ t.accounts_intro }}</p>
 
 {% if not ha_reachable %}
-{{ error_box("Home Assistant isn't answering, so its devices can't be listed. The accounts are shown as they are, and can be edited again once it answers.", burburito) }}
+{{ error_box(t.accounts_ha_down, burburito) }}
 
 {% for row in rows %}
 <div class="card">
@@ -18,28 +16,29 @@
     {% for target in row.targets %}<li><code>{{ target }}</code></li>{% endfor %}
   </ul>
   {% else %}
-  <p class="empty">No device assigned.</p>
+  <p class="empty">{{ t.no_device }}</p>
   {% endif %}
 </div>
 {% endfor %}
 
 {% else %}
 {% if not mobile_targets %}
-  <p class="empty">No notify.mobile_app_* device found in Home Assistant.</p>
+  <p class="empty">{{ t.accounts_no_devices }}</p>
 {% endif %}
 
 <div class="card">
-  <h2>Add account</h2>
+  <h2>{{ t.add_account }}</h2>
   <form method="post" action="/admin/accounts/save">
     <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
     <input type="email" name="email" placeholder="person@example.com" required class="full-width">
     {% for target in mobile_targets %}
+    <input type="hidden" name="shown" value="{{ target }}">
     <label class="target-label">
       <input type="checkbox" name="targets" value="{{ target }}">
       {{ target }}
     </label>
     {% endfor %}
-    <button type="submit">Save</button>
+    <button type="submit">{{ t.save }}</button>
   </form>
 </div>
 
@@ -49,13 +48,17 @@
   <form method="post" action="/admin/accounts/save">
     <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
     <input type="hidden" name="email" value="{{ row.email }}">
-    {% for target in mobile_targets %}
+    {# Its own devices are listed even when Home Assistant does not show them
+       right now (an app being reinstalled): a device left off this form
+       would be dropped on save without anyone having unchecked it. #}
+    {% for target in (mobile_targets + row.targets) | unique | sort %}
+    <input type="hidden" name="shown" value="{{ target }}">
     <label class="target-label">
       <input type="checkbox" name="targets" value="{{ target }}" {% if target in row.targets %}checked{% endif %}>
-      {{ target }}
+      {{ target }}{% if target not in mobile_targets %} <span class="muted">— {{ t.device_missing }}</span>{% endif %}
     </label>
     {% endfor %}
-    <button type="submit">Save</button>
+    <button type="submit">{{ t.save }}</button>
   </form>
 </div>
 {% endfor %}

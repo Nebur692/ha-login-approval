@@ -11,8 +11,10 @@ for a panel reachable from the internet.
   IDLE_TIMEOUT without use, or ABSOLUTE_TIMEOUT after sign-in, whichever
   comes first.
 - Every form that changes something carries the session's CSRF token.
-- Failed sign-ins are counted per address and overall; past the limit the
-  panel refuses even the right password until the window has passed.
+- Failed sign-ins are counted per address; past the limit that address is
+  refused even the right password until the window has passed. Per address
+  only, on purpose: an overall limit would let anyone with enough addresses
+  lock the owner out of the panel at will.
 - A password that is short or well known disables the panel instead of
   protecting it badly. The sign-in flow itself is never affected.
 """
@@ -28,9 +30,6 @@ ABSOLUTE_TIMEOUT = timedelta(hours=8)
 
 FAILURE_WINDOW = timedelta(minutes=15)
 FAILURES_PER_ADDRESS = 5
-FAILURES_OVERALL = 50
-"""Overall, across every address: someone with many addresses gets the same
-handful of guesses, not a handful each."""
 
 MIN_PASSWORD_LENGTH = 12
 _WELL_KNOWN = {
@@ -56,14 +55,23 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def password_problem() -> str | None:
-    """Why the configured admin password is not good enough, or None."""
+def password_weakness() -> str | None:
+    """"short", "known", or None when the configured admin password is fine.
+    A reason rather than a sentence: each language words it its own way."""
     password = settings.admin_password
     if len(password) < MIN_PASSWORD_LENGTH:
-        return f"ADMIN_PASSWORD is shorter than {MIN_PASSWORD_LENGTH} characters."
+        return "short"
     if password.lower() in _WELL_KNOWN or password.lower() == settings.admin_username.lower():
-        return "ADMIN_PASSWORD is a default or well-known password."
+        return "known"
     return None
+
+
+def password_problem() -> str | None:
+    """The same, as an English sentence for the log, or None."""
+    return {
+        "short": f"ADMIN_PASSWORD is shorter than {MIN_PASSWORD_LENGTH} characters.",
+        "known": "ADMIN_PASSWORD is a default or well-known password.",
+    }.get(password_weakness())
 
 
 def credentials_match(username: str, password: str) -> bool:
@@ -90,10 +98,7 @@ async def too_many_failures(ip: str) -> bool:
     cursor = await db.execute(
         "SELECT COUNT(*) FROM admin_events WHERE event = ? AND ip = ? AND at > ?", (LOGIN_FAILED, ip, since),
     )
-    if (await cursor.fetchone())[0] >= FAILURES_PER_ADDRESS:
-        return True
-    cursor = await db.execute("SELECT COUNT(*) FROM admin_events WHERE event = ? AND at > ?", (LOGIN_FAILED, since))
-    return (await cursor.fetchone())[0] >= FAILURES_OVERALL
+    return (await cursor.fetchone())[0] >= FAILURES_PER_ADDRESS
 
 
 async def create(username: str, ip: str, user_agent: str) -> str:

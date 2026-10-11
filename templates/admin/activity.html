@@ -1,15 +1,15 @@
 {% extends "admin/base.html" %}
-{% block title %}Activity{% endblock %}
+{% block title %}{{ t.activity_title }}{% endblock %}
 {% block content %}
-<h1>Admin activity</h1>
+<h1>{{ t.activity_heading }}</h1>
 
 <div class="card">
-  <h2>Signed in now</h2>
+  <h2>{{ t.signed_in_now }}</h2>
   <table>
-    <tr><th>User</th><th>Since</th><th>Last seen</th><th>From</th><th></th></tr>
+    <tr><th>{{ t.user }}</th><th>{{ t.since }}</th><th>{{ t.last_seen }}</th><th>{{ t.from }}</th><th></th></tr>
     {% for s in sessions %}
     <tr>
-      <td>{{ s.username }}{% if s.token_hash == request.state.session_hash %} <span class="muted">(this one)</span>{% endif %}</td>
+      <td>{{ s.username }}{% if s.token_hash == request.state.session_hash %} <span class="muted">{{ t.this_one }}</span>{% endif %}</td>
       <td>{{ s.created_at | local_datetime }}</td>
       <td>{{ s.last_seen_at | local_datetime }}</td>
       <td>{{ s.ip }}<br><span class="muted">{{ s.user_agent }}</span></td>
@@ -17,7 +17,7 @@
         <form method="post" action="/admin/activity/end-session" class="inline">
           <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
           <input type="hidden" name="token_hash" value="{{ s.token_hash }}">
-          <button type="submit">Sign out</button>
+          <button type="submit">{{ t.sign_out }}</button>
         </form>
       </td>
     </tr>
@@ -25,16 +25,16 @@
   </table>
 </div>
 
-<h2>Last {{ events | length }} events</h2>
+<h2>{{ t.last_events.format(n=events | length) }}</h2>
 {% if not events %}
-  <p class="empty">Nothing recorded yet.</p>
+  <p class="empty">{{ t.nothing_yet }}</p>
 {% else %}
 <table>
-  <tr><th>When</th><th>Event</th><th>User</th><th>From</th><th>Detail</th></tr>
+  <tr><th>{{ t.when }}</th><th>{{ t.event }}</th><th>{{ t.user }}</th><th>{{ t.from }}</th><th>{{ t.detail }}</th></tr>
   {% for e in events %}
   <tr>
     <td>{{ e.at | local_datetime }}</td>
-    <td class="{% if e.event in ('login_failed', 'login_refused') %}warn{% endif %}">{{ e.event }}</td>
+    <td class="{% if e.event in ('login_failed', 'login_refused') %}warn{% endif %}">{{ t.events.get(e.event, e.event) }}</td>
     <td>{{ e.username }}</td>
     <td>{{ e.ip }}</td>
     <td>{{ e.detail }}</td>

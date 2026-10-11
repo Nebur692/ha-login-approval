@@ -1,15 +1,14 @@
 {% extends "admin/base.html" %}
-{% block title %}Blocked IPs{% endblock %}
+{% block title %}{{ t.blocked_title }}{% endblock %}
 {% block content %}
-<h1>Blocked IPs</h1>
-<p class="muted">3 consecutive failures (explicit rejects + wrong recovery codes) on the same
-   account + IP block that pair — never a global IP block.</p>
+<h1>{{ t.blocked_heading }}</h1>
+<p class="muted">{{ t.blocked_intro }}</p>
 
 {% if not blocked %}
-  <p class="empty">No IP is currently blocked.</p>
+  <p class="empty">{{ t.blocked_none }}</p>
 {% else %}
 <table>
-  <tr><th>Account</th><th>IP</th><th>Blocked at</th><th></th></tr>
+  <tr><th>{{ t.account }}</th><th>IP</th><th>{{ t.blocked_at }}</th><th></th></tr>
   {% for b in blocked %}
   <tr>
     <td>{{ b.account_id }}</td>
@@ -20,7 +19,7 @@
         <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="account_id" value="{{ b.account_id }}">
         <input type="hidden" name="ip" value="{{ b.ip }}">
-        <button type="submit">Unblock</button>
+        <button type="submit">{{ t.unblock }}</button>
       </form>
     </td>
   </tr>

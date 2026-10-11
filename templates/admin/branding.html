@@ -1,22 +1,21 @@
 {% extends "admin/base.html" %}
-{% block title %}Branding{% endblock %}
+{% block title %}{{ t.branding_title }}{% endblock %}
 {% block content %}
-<h1>Bridge page branding</h1>
-<p class="muted">Shown on the public login page. Any image format/size is accepted — logo and
-favicon are converted to PNG, background to JPEG, each resized down to a sane maximum.</p>
+<h1>{{ t.branding_heading }}</h1>
+<p class="muted">{{ t.branding_intro }}</p>
 
 <form method="post" action="/admin/branding/save" enctype="multipart/form-data">
   <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
-  <label>Title<br><input type="text" name="title" value="{{ branding.title or '' }}"></label><br><br>
-  <label>Logo<br><input type="file" name="logo" accept="image/*"></label>
-  {% if branding.logo_path %}<p class="muted">Current: <img src="/branding/logo" alt="" class="thumb"></p>{% endif %}
+  <label>{{ t.title_field }}<br><input type="text" name="title" value="{{ branding.title or '' }}"></label><br><br>
+  <label>{{ t.logo }}<br><input type="file" name="logo" accept="image/*"></label>
+  {% if branding.logo_path %}<p class="muted">{{ t.current }} <img src="/branding/logo" alt="" class="thumb"></p>{% endif %}
   <br>
-  <label>Background<br><input type="file" name="background" accept="image/*"></label>
-  {% if branding.background_path %}<p class="muted">Current: <img src="/branding/background" alt="" class="thumb"></p>{% endif %}
+  <label>{{ t.background }}<br><input type="file" name="background" accept="image/*"></label>
+  {% if branding.background_path %}<p class="muted">{{ t.current }} <img src="/branding/background" alt="" class="thumb"></p>{% endif %}
   <br>
-  <label>Favicon<br><input type="file" name="favicon" accept="image/*"></label>
-  {% if branding.favicon_path %}<p class="muted">Current: <img src="/branding/favicon" alt="" class="thumb small"></p>{% endif %}
+  <label>{{ t.favicon }}<br><input type="file" name="favicon" accept="image/*"></label>
+  {% if branding.favicon_path %}<p class="muted">{{ t.current }} <img src="/branding/favicon" alt="" class="thumb small"></p>{% endif %}
   <br><br>
-  <button type="submit">Save</button>
+  <button type="submit">{{ t.save }}</button>
 </form>
 {% endblock %}

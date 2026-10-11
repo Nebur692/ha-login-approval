@@ -1,9 +1,9 @@
 {# The error a person sees: what happened, whether they need to act, and the
-   burburito footer last. `b` is app.burburito.footer(...). #}
+   burburito footer last. `b` is app.burburito.footer(...) in the page's language. #}
 {% macro error_box(message, b) %}
 <div class="card burburito">
   <p class="warn">{{ message }}</p>
-  <p><strong>{% if b.act %}You DO need to do something.{% else %}You do NOT need to do anything.{% endif %}</strong></p>
+  <p><strong>{% if b.act %}{{ t.act_yes }}{% else %}{{ t.act_no }}{% endif %}</strong></p>
   <p class="muted">{{ b.text }}<br>{{ b.label }}: <code>{{ b.code }}</code></p>
 </div>
 {% endmacro %}

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Admin{% endblock %} — ha-login-approval</title>
+  <title>{% block title %}{{ t.login_heading }}{% endblock %} — ha-login-approval</title>
   <style nonce="{{ request.state.csp_nonce }}">
     body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
     nav { margin-bottom: 1.5rem; border-bottom: 1px solid #ddd; padding-bottom: 0.75rem; }
@@ -32,17 +32,17 @@
 <body>
   {% if request.state.admin_user %}
   <nav>
-    <a href="/admin" class="{% if active == 'home' %}active{% endif %}">Home</a>
-    <a href="/admin/accounts" class="{% if active == 'accounts' %}active{% endif %}">Accounts</a>
-    <a href="/admin/audit" class="{% if active == 'audit' %}active{% endif %}">Audit</a>
-    <a href="/admin/recovery" class="{% if active == 'recovery' %}active{% endif %}">Recovery codes</a>
-    <a href="/admin/blocked-ips" class="{% if active == 'blocked_ips' %}active{% endif %}">Blocked IPs</a>
-    <a href="/admin/branding" class="{% if active == 'branding' %}active{% endif %}">Branding</a>
-    <a href="/admin/signing-key" class="{% if active == 'signing_key' %}active{% endif %}">Signing key</a>
-    <a href="/admin/activity" class="{% if active == 'activity' %}active{% endif %}">Activity</a>
+    <a href="/admin" class="{% if active == 'home' %}active{% endif %}">{{ t.nav_home }}</a>
+    <a href="/admin/accounts" class="{% if active == 'accounts' %}active{% endif %}">{{ t.nav_accounts }}</a>
+    <a href="/admin/audit" class="{% if active == 'audit' %}active{% endif %}">{{ t.nav_audit }}</a>
+    <a href="/admin/recovery" class="{% if active == 'recovery' %}active{% endif %}">{{ t.nav_recovery }}</a>
+    <a href="/admin/blocked-ips" class="{% if active == 'blocked_ips' %}active{% endif %}">{{ t.nav_blocked }}</a>
+    <a href="/admin/branding" class="{% if active == 'branding' %}active{% endif %}">{{ t.nav_branding }}</a>
+    <a href="/admin/signing-key" class="{% if active == 'signing_key' %}active{% endif %}">{{ t.nav_signing_key }}</a>
+    <a href="/admin/activity" class="{% if active == 'activity' %}active{% endif %}">{{ t.nav_activity }}</a>
     <form method="post" action="/admin/logout" class="inline logout">
       <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
-      <button type="submit">Sign out ({{ request.state.admin_user }})</button>
+      <button type="submit">{{ t.sign_out }} ({{ request.state.admin_user }})</button>
     </form>
   </nav>
   {% endif %}
