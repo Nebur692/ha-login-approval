@@ -219,3 +219,50 @@ def _kc(client_data: str) -> str:
 async def test_anything_else_is_not_a_keycloak_state(state, monkeypatch):
     monkeypatch.setattr(settings, "zitadel_api_url", "")
     assert await target_app.resolve(state) is None
+
+
+# One sign-in proxy in front of many sites is a single app in ZITADEL, with a
+# redirect URI per site (real case: oauth2-proxy behind Nginx Proxy Manager).
+# Its name is the proxy's, the same for every site: only the host says which.
+def _oidc_changed(uris):
+    return {"type": {"type": "project.application.config.oidc.changed"},
+            "payload": {"appId": APP_ID, "redirectUris": uris}}
+
+
+async def test_an_app_with_one_site_keeps_its_name(zitadel):
+    zitadel.apps = _app_events(_oidc_changed(["https://admin.example.com/", "https://admin.example.com/other"]))
+    assert (await target_app.resolve(STATE)).label() == "Admin portal (admin.example.com)"
+
+
+async def test_an_app_in_front_of_several_sites_shows_only_the_site(zitadel):
+    zitadel.auth_request = {**AUTH_REQUEST_ADDED, "redirect_uri": "https://nas.example.com/oauth2/callback"}
+    zitadel.apps = [
+        {"type": {"type": "project.application.added"}, "payload": {"appId": APP_ID, "name": "oauth2-proxy"}},
+        {"type": {"type": "project.application.config.oidc.added"},
+         "payload": {"appId": APP_ID, "clientId": CLIENT_ID,
+                     "redirectUris": ["https://nas.example.com/oauth2/callback", "https://ddns.example.com/oauth2/callback"]}},
+    ]
+    app = await target_app.resolve(STATE)
+    assert app == target_app.TargetApp(name=None, host="nas.example.com")
+    assert app.label() == "nas.example.com"
+
+
+async def test_an_app_that_later_gains_a_second_site_shows_only_the_site(zitadel):
+    zitadel.apps = _app_events(_oidc_changed(["https://admin.example.com/", "https://ddns.example.com/"]))
+    assert (await target_app.resolve(STATE)).label() == "admin.example.com"
+
+
+async def test_a_change_without_redirect_uris_keeps_what_was_known(zitadel):
+    zitadel.apps = _app_events(
+        _oidc_changed(["https://admin.example.com/", "https://ddns.example.com/"]),
+        {"type": {"type": "project.application.config.oidc.changed"}, "payload": {"appId": APP_ID, "devMode": True}},
+    )
+    assert (await target_app.resolve(STATE)).label() == "admin.example.com"
+
+
+async def test_a_shared_app_is_not_reread_on_every_login(zitadel):
+    zitadel.apps = _app_events(_oidc_changed(["https://admin.example.com/", "https://ddns.example.com/"]))
+    await target_app.resolve(STATE)
+    await target_app.resolve(STATE)
+    # two logins x (intent + request) + a single app-list read, as for any app
+    assert zitadel.calls.count("/admin/v1/events/_search") == 5

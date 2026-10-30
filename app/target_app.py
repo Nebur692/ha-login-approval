@@ -50,6 +50,7 @@ _APP_EVENT_TYPES = [
     "project.application.changed",
     "project.application.removed",
     "project.application.config.oidc.added",
+    "project.application.config.oidc.changed",
 ]
 
 
@@ -66,7 +67,9 @@ class TargetApp:
 
 _token: str | None = None
 _token_expires_at = 0.0
-_app_names: dict[str, str] = {}
+_app_names: dict[str, str | None] = {}
+"""client_id -> app name; None for an app that serves several sites, whose
+name says nothing about which one the person is signing in to."""
 _apps_loaded_at: float | None = None
 """When the app list was last read; None until the first time. Not 0.0: the
 monotonic clock counts from boot, so on a machine up for under a minute a
@@ -160,7 +163,10 @@ async def _first_event(client: httpx.AsyncClient, aggregate_id: str, event_type:
 
 
 async def _app_name(client: httpx.AsyncClient, client_id: str) -> str | None:
-    """client_id -> app name, from the project events. Kept in memory and
+    """client_id -> app name, from the project events. None for an app whose
+    redirect URIs span several hosts — one sign-in proxy in front of many
+    sites, say: its name is the proxy's, so only the host tells them apart and
+    the notification shows that alone. Kept in memory and
     reloaded on a miss, so an app created after startup is found too — but not
     more than once a minute, or an unknown client_id would mean a reload per
     login."""
@@ -176,11 +182,13 @@ async def _app_name(client: httpx.AsyncClient, client_id: str) -> str | None:
     return _app_names.get(client_id)
 
 
-def _names_by_client_id(events: list[dict]) -> dict[str, str]:
+def _names_by_client_id(events: list[dict]) -> dict[str, str | None]:
     """Replays the app events in order: an app is named when added, may be
-    renamed, gets its client_id with its OIDC config, and may be removed."""
+    renamed, gets its client_id and redirect URIs with its OIDC config (the
+    URIs may change later), and may be removed."""
     names: dict[str, str] = {}
     client_ids: dict[str, str] = {}
+    hosts: dict[str, set[str]] = {}
     for event in events:
         kind = (event.get("type") or {}).get("type")
         payload = event.get("payload") or {}
@@ -189,12 +197,27 @@ def _names_by_client_id(events: list[dict]) -> dict[str, str]:
             continue
         if kind in ("project.application.added", "project.application.changed") and payload.get("name"):
             names[app_id] = payload["name"][:_MAX_NAME]
-        elif kind == "project.application.config.oidc.added" and payload.get("clientId"):
-            client_ids[app_id] = payload["clientId"]
+        elif kind in ("project.application.config.oidc.added", "project.application.config.oidc.changed"):
+            if payload.get("clientId"):
+                client_ids[app_id] = payload["clientId"]
+            # A change event carries only what changed: no URIs, no news.
+            if isinstance(payload.get("redirectUris"), list):
+                hosts[app_id] = {h for h in (_host(u) for u in payload["redirectUris"]) if h}
         elif kind == "project.application.removed":
             names.pop(app_id, None)
             client_ids.pop(app_id, None)
-    return {client_id: names[app_id] for app_id, client_id in client_ids.items() if app_id in names}
+            hosts.pop(app_id, None)
+    return {
+        client_id: (None if len(hosts.get(app_id, ())) > 1 else names[app_id])
+        for app_id, client_id in client_ids.items() if app_id in names
+    }
+
+
+def _host(uri) -> str | None:
+    try:
+        return urlparse(uri).hostname if isinstance(uri, str) else None
+    except ValueError:
+        return None
 
 
 async def _search_events(client: httpx.AsyncClient, query: dict) -> list[dict]:
