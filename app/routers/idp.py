@@ -30,15 +30,17 @@ import hashlib
 import hmac
 import logging
 import re
+import secrets
 import time
 import uuid
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Form, Header, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from app import accounts, audit, client_ip, geoip, ha_client, idp_jwt, ip_blocking, messages, recovery_codes, target_app
+from app import (accounts, audit, client_ip, geoip, ha_client, idp_jwt, ip_blocking, login_map, messages,
+                 recovery_codes, target_app)
 from app.approval_flow import ApprovalOutcome, LoginContext, run_approval
 from app.branding import CONTENT_TYPES, asset_path, get_branding
 from app.config import settings
@@ -268,13 +270,28 @@ _OUTCOME_TO_STATUS = {
 }
 
 
-async def _log_audit(account_id: str, request_id: str, event_type: str, ip: str, user_agent: str) -> None:
+async def _log_audit(account_id: str, request_id: str, event_type: str, ip: str, user_agent: str,
+                     map_png: bytes | None = None) -> None:
     geo = geoip.lookup(ip)
     await audit.log_event(
         get_db(), account_id, request_id, event_type,
         ip=ip, user_agent=user_agent,
         geo_city=geo.city, geo_country=geo.country, geo_asn_org=geo.asn_org,
     )
+    if map_png:
+        await audit.store_map(get_db(), request_id, map_png)
+
+
+@router.get("/idp/map/{token}.png")
+async def notification_map(token: str):
+    """The map the phone downloads for the notification. Only while that
+    request is still waiting for an answer, and only under a token nobody
+    can guess; once answered, the map is only in the audit log."""
+    for pending in list(_pending.values()):
+        expected = pending.get("map_token")
+        if expected and secrets.compare_digest(expected, token):
+            return Response(pending["map_png"], media_type="image/png")
+    raise HTTPException(status_code=404)
 
 
 async def _maybe_warn_low_recovery_codes(account_id: str, targets: list[str]) -> None:
@@ -341,6 +358,13 @@ async def _run_notify_and_wait(request_id: str, targets: list[str]) -> None:
     app = pending["target_app"]
 
     geo = geoip.lookup(pending["ip"])
+    # Drawn once per login, like the app above: a resend shows the same map.
+    if "map_png" not in pending:
+        pending["map_png"] = await login_map.build(geo)
+    image_url = None
+    if pending["map_png"]:
+        pending.setdefault("map_token", secrets.token_urlsafe(32))
+        image_url = f"{settings.idp_issuer_url.rstrip('/')}/idp/map/{pending['map_token']}.png"
     context = LoginContext(
         app=app.label() if app else None,
         ip=pending["ip"],
@@ -348,6 +372,7 @@ async def _run_notify_and_wait(request_id: str, targets: list[str]) -> None:
         geo_city=geo.city,
         geo_country=geo.country,
         geo_asn_org=geo.asn_org,
+        image_url=image_url,
     )
     try:
         outcome = await run_approval(targets, request_id, context)
@@ -370,6 +395,8 @@ async def _run_notify_and_wait(request_id: str, targets: list[str]) -> None:
         return
 
     pending["status"] = _OUTCOME_TO_STATUS[outcome]
+    # Answered (or given up on): the phone's copy of the map goes away now.
+    pending.pop("map_token", None)
 
     if outcome == ApprovalOutcome.APPROVED:
         await ip_blocking.record_success(db, account_id, pending["ip"])
@@ -383,7 +410,8 @@ async def _run_notify_and_wait(request_id: str, targets: list[str]) -> None:
         # block threshold, unlike a silent timeout.
         await ip_blocking.record_failure(db, account_id, pending["ip"])
 
-    await _log_audit(account_id, request_id, pending["status"], pending["ip"], pending["user_agent"])
+    await _log_audit(account_id, request_id, pending["status"], pending["ip"], pending["user_agent"],
+                     map_png=pending.get("map_png"))
 
 
 async def _start_approval(request_id: str, email: str) -> None:
@@ -488,7 +516,9 @@ async def submit_recovery_code(request: Request, request_id: str = Form(...), co
         raise HTTPException(status_code=401, detail="invalid recovery code")
 
     await ip_blocking.record_success(db, account_id, ip)
-    await _log_audit(account_id, request_id, "recovery_code_used", ip, pending["user_agent"])
+    pending.pop("map_token", None)
+    await _log_audit(account_id, request_id, "recovery_code_used", ip, pending["user_agent"],
+                     map_png=pending.get("map_png"))
 
     targets = await accounts.get_targets(db, pending["email"])
     await _maybe_warn_low_recovery_codes(account_id, targets)

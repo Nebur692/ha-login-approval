@@ -24,9 +24,27 @@ async def log_event(db, account_id: str, request_id: str, event_type: str,
     await db.commit()
 
 
+async def store_map(db, request_id: str, png: bytes) -> None:
+    """The notification's map, kept for the audit log. One per login request:
+    a second event for the same request (a resend, a recovery code after a
+    timeout) keeps the first."""
+    await db.execute(
+        "INSERT OR IGNORE INTO login_maps (request_id, png, created_at) VALUES (?, ?, ?)",
+        (request_id, png, datetime.now(timezone.utc).isoformat()),
+    )
+    await db.commit()
+
+
+async def get_map(db, request_id: str) -> bytes | None:
+    cursor = await db.execute("SELECT png FROM login_maps WHERE request_id = ?", (request_id,))
+    row = await cursor.fetchone()
+    return row["png"] if row else None
+
+
 async def list_events(db, account_id: str, limit: int = 50) -> list[dict]:
     cursor = await db.execute(
-        "SELECT * FROM login_events WHERE account_id = ? ORDER BY occurred_at DESC LIMIT ?",
+        "SELECT e.*, EXISTS (SELECT 1 FROM login_maps m WHERE m.request_id = e.request_id) AS has_map "
+        "FROM login_events e WHERE e.account_id = ? ORDER BY e.occurred_at DESC LIMIT ?",
         (account_id, limit),
     )
     return [dict(row) for row in await cursor.fetchall()]

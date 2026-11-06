@@ -47,7 +47,7 @@ STRINGS = {
         # audit
         "audit_title": "Auditoría", "audit_heading": "Historial de intentos de inicio de sesión",
         "audit_none": "Todavía no hay intentos registrados para esta cuenta.",
-        "when": "Cuándo", "result": "Resultado", "browser": "Navegador", "location": "Ubicación",
+        "when": "Cuándo", "result": "Resultado", "browser": "Navegador", "location": "Ubicación", "map": "Mapa",
         "audit_events": {
             "approved": "aprobado", "rejected": "rechazado", "timeout": "sin respuesta",
             "recovery_code_used": "código de recuperación usado", "send_failed": "no se pudo enviar",
@@ -119,7 +119,7 @@ STRINGS = {
         "device_missing": "not in Home Assistant right now: kept while it stays checked",
         "audit_title": "Audit", "audit_heading": "Login attempt history",
         "audit_none": "No login attempts recorded for this account yet.",
-        "when": "When", "result": "Result", "browser": "Browser", "location": "Location",
+        "when": "When", "result": "Result", "browser": "Browser", "location": "Location", "map": "Map",
         "audit_events": {
             "approved": "approved", "rejected": "rejected", "timeout": "timeout",
             "recovery_code_used": "recovery code used", "send_failed": "send failed",

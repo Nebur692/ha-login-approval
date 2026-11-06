@@ -2,7 +2,8 @@
 approved/rejected/timeout/recovery code used/send failed, with timestamp,
 IP, browser, and (from Fase 4) city/country/ISP. Keyed by the generic
 account directory (accounts.py), not any RP's own user IDs."""
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
 
 from app import accounts
 from app import audit as audit_log
@@ -28,3 +29,13 @@ async def audit_page(request: Request, account_id: str | None = None, _: str = D
         "selected_id": selected_id,
         "events": events,
     })
+
+
+@router.get("/admin/audit/map/{request_id}.png")
+async def audit_map(request_id: str, _: str = Depends(require_admin)):
+    """The map the notification carried for that sign-in. Only here, behind
+    the admin sign-in, once the request is over."""
+    png = await audit_log.get_map(get_db(), request_id)
+    if png is None:
+        raise HTTPException(status_code=404)
+    return Response(png, media_type="image/png")

@@ -84,5 +84,20 @@ class Settings(BaseSettings):
     their path lives in the bridge_branding table, keeping the SQLite file
     itself small and a simple single-file backup."""
 
+    # v2.9.0 map in the notification
+    notification_map: bool = True
+    """Attach a map of where the sign-in comes from to the push notification
+    (needs GeoIP and IDP_ISSUER_URL). The phone downloads it from this
+    service while the request waits; afterwards it only lives in the audit
+    log, behind the admin sign-in."""
+    map_tile_url: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    map_tile_attribution: str = "© OpenStreetMap"
+    operator_logos: bool = True
+    """Put the network operator's logo on the map: the ASN's website comes
+    from PeeringDB and the icon from that website. Cached per ASN."""
+    map_budget_seconds: float = 4.0
+    """The notification never waits longer than this for its map: past it,
+    it goes out without one."""
+
 
 settings = Settings()

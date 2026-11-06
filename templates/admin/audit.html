@@ -15,7 +15,7 @@
   <p class="empty">{{ t.audit_none }}</p>
 {% else %}
 <table>
-  <tr><th>{{ t.when }}</th><th>{{ t.result }}</th><th>IP</th><th>{{ t.browser }}</th><th>{{ t.location }}</th></tr>
+  <tr><th>{{ t.when }}</th><th>{{ t.result }}</th><th>IP</th><th>{{ t.browser }}</th><th>{{ t.location }}</th><th>{{ t.map }}</th></tr>
   {% for e in events %}
   <tr>
     <td>{{ e.occurred_at | local_datetime }}</td>
@@ -23,6 +23,7 @@
     <td>{{ e.ip or "" }}</td>
     <td>{{ e.user_agent or "" }}</td>
     <td>{{ [e.geo_city, e.geo_country, e.geo_asn_org] | select | join(", ") }}</td>
+    <td>{% if e.has_map %}<a href="/admin/audit/map/{{ e.request_id }}.png" target="_blank" rel="noopener"><img class="audit-map" src="/admin/audit/map/{{ e.request_id }}.png" alt="{{ t.map }}" width="160" height="80" loading="lazy"></a>{% endif %}</td>
   </tr>
   {% endfor %}
 </table>

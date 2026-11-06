@@ -155,34 +155,37 @@ async def send_approval_notification(
     message: str,
     approve_label: str,
     reject_label: str,
+    image_url: str | None = None,
 ) -> None:
     """Sends an actionable notification with Approve/Reject buttons to a
     single notify.* target. The request_id is baked into the action names
     themselves (approve_login_<id> / reject_login_<id>) rather than relying
     on extra action-data fields, since those aren't echoed back reliably on
     every platform — this way correlation only needs string-parsing the
-    action name, which every Companion App version already supports."""
-    await call_service("notify", target, {
-        "title": title,
-        "message": message,
-        "data": {
-            "tag": request_id,
-            "actions": [
-                {"action": f"approve_login_{request_id}", "title": approve_label},
-                {"action": f"reject_login_{request_id}", "title": reject_label},
-            ],
-            # iOS: shows immediately, overrides Focus modes, no special
-            # entitlement needed (unlike "critical", which requires Apple's
-            # critical-alerts entitlement and may silently not escalate
-            # without it).
-            "push": {"interruption-level": "time-sensitive"},
-            # Android: a dedicated high-importance channel is what actually
-            # makes it a heads-up notification — "push.interruption-level"
-            # above is iOS-only and does nothing on Android.
-            "channel": "Login Approval",
-            "importance": "high",
-        },
-    })
+    action name, which every Companion App version already supports.
+
+    `image_url`, when given, is a map the phone downloads and shows inside
+    the notification (both Companion Apps understand `image`)."""
+    data = {
+        "tag": request_id,
+        "actions": [
+            {"action": f"approve_login_{request_id}", "title": approve_label},
+            {"action": f"reject_login_{request_id}", "title": reject_label},
+        ],
+        # iOS: shows immediately, overrides Focus modes, no special
+        # entitlement needed (unlike "critical", which requires Apple's
+        # critical-alerts entitlement and may silently not escalate
+        # without it).
+        "push": {"interruption-level": "time-sensitive"},
+        # Android: a dedicated high-importance channel is what actually
+        # makes it a heads-up notification — "push.interruption-level"
+        # above is iOS-only and does nothing on Android.
+        "channel": "Login Approval",
+        "importance": "high",
+    }
+    if image_url:
+        data["image"] = image_url
+    await call_service("notify", target, {"title": title, "message": message, "data": data})
 
 
 # ---------------------------------------------------------------------------

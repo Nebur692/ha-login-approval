@@ -52,6 +52,11 @@ any other standards-compliant one) can redirect to this service, and it handles 
   never leaves the browser stuck on a dead page.
 - **Optional GeoIP enrichment** (self-hosted MaxMind GeoLite2 — no third-party API call per login)
   adds city/country/ISP to both the audit log and the push notification itself.
+- **A map in the notification**: where the sign-in comes from, with a circle as wide as GeoIP's own
+  uncertainty and the network operator's logo. The phone downloads it while the request waits;
+  once answered it is only kept in the audit log, behind the admin sign-in. Map tiles come from
+  OpenStreetMap and the operator's website from PeeringDB (both cached); switch it off with
+  `NOTIFICATION_MAP=false`.
 - **Admin panel**: an at-a-glance home page, the account directory, per-account login history,
   recovery-code management, blocked-IP list, and page branding.
 
@@ -88,6 +93,9 @@ variables:
 | `RECOVERY_CODE_BATCH_SIZE` | `10` | How many recovery codes get generated at once from `/admin/recovery`. |
 | `RECOVERY_CODE_LOW_WARNING` | `3` | Push a warning once this many recovery codes (or fewer) remain. |
 | `GEOIP_ACCOUNT_ID` / `GEOIP_LICENSE_KEY` | *(empty)* | Optional free [MaxMind](https://www.maxmind.com/) account, to add city/country/ISP to both the audit log and the push notification itself. Left empty, that part just stays blank — login still works exactly the same. |
+| `NOTIFICATION_MAP` | `true` | Attach a map of the sign-in's location to the notification (needs GeoIP and `IDP_ISSUER_URL`, which the phone downloads it from). It is drawn within `MAP_BUDGET_SECONDS` (`4`) or the notification goes without it. The public copy disappears as soon as the request is answered, rejected or times out; the audit log keeps one per sign-in. |
+| `MAP_TILE_URL` / `MAP_TILE_ATTRIBUTION` | OpenStreetMap | Map tiles, `{z}/{x}/{y}` style, and the credit printed on the map. The default follows the [OpenStreetMap tile usage policy](https://operations.osmfoundation.org/policies/tiles/) for a handful of sign-ins a day; point it at your own tile server for more. |
+| `OPERATOR_LOGOS` | `true` | Put the network operator's logo on the map: the ASN's website is looked up in [PeeringDB](https://www.peeringdb.com/) and its biggest icon is used. Kept for 30 days per operator (7 when none was found). Only public HTTPS addresses are ever fetched. |
 | `ZITADEL_API_URL` / `ZITADEL_API_CLIENT_ID` / `ZITADEL_API_CLIENT_SECRET` | *(empty)* | Optional, ZITADEL only: name the app being signed in to in the notification (e.g. `App: Grafana (grafana.example.com)`). An app that serves several sites — one sign-in proxy such as oauth2-proxy in front of many, each with its own redirect URI — is shown by the site alone (`App: nas.example.com`), since its name would be the same for all of them. The login itself never says which app it is for, but ZITADEL records it, and this service can ask. Create a **service user** with a client secret and give it the read-only **`IAM_OWNER_VIEWER`** role (Default settings → Administrators); it only reads ZITADEL's event store. Left empty, or if ZITADEL does not answer within 3 s, the notification simply has no app line. **With Keycloak nothing needs configuring**: the app's address (not its name) is read from the request Keycloak itself sends. |
 
 A ready-to-use Unraid Community Applications template is included:
@@ -192,7 +200,7 @@ All under `/admin`. You sign in with `ADMIN_USERNAME`/`ADMIN_PASSWORD` on a sign
 |---|---|
 | **Home** | At-a-glance: total accounts, how many have devices assigned, recovery codes running low, currently blocked IPs. |
 | **Accounts** | Add an email, tick which devices get notified for it. This is the only account model the service uses — independent of any IDP. A device assigned to an account but missing from Home Assistant right now is still listed and kept, unless you untick it. |
-| **Audit** | Per-account history: approved / rejected / timed out / recovery code used / send failed, with timestamp, IP, browser, and (if GeoIP is configured) city/country/ISP. |
+| **Audit** | Per-account history: approved / rejected / timed out / recovery code used / send failed, with timestamp, IP, browser, (if GeoIP is configured) city/country/ISP, and the map the notification carried. |
 | **Recovery codes** | Generate or regenerate a batch per account — shown once, then never retrievable again. Regenerating instantly invalidates every code from the previous batch. |
 | **Blocked IPs** | See who's currently blocked and unblock manually — important if three accidental rejects (or mistyped codes) lock out the real account owner. |
 | **Branding** | Upload a logo/background/favicon and set a title for the bridge page. Any image format or size is accepted — each is automatically converted and resized (logo/favicon to PNG, background to JPEG). |
@@ -316,6 +324,11 @@ cualquier otro que cumpla el estándar) puede redirigir a este servicio, que se 
 - **Enriquecimiento GeoIP opcional** (MaxMind GeoLite2 autoalojado — sin llamar a ningún API de
   terceros en cada login) añade ciudad/país/operador tanto a la auditoría como a la propia
   notificación push.
+- **Un mapa en la notificación**: desde dónde se inicia sesión, con un círculo tan ancho como la
+  incertidumbre del propio GeoIP y el logo del operador de la red. El móvil lo descarga mientras
+  la petición espera; una vez respondida solo queda en la auditoría, tras el acceso al panel. Los
+  mapas salen de OpenStreetMap y la web del operador de PeeringDB (los dos con caché); se apaga con
+  `NOTIFICATION_MAP=false`.
 - **Panel de administración**: resumen de un vistazo, directorio de cuentas, historial de login por
   cuenta, gestión de códigos de recuperación, lista de IPs bloqueadas, y personalización de la
   página.
@@ -353,6 +366,9 @@ entorno:
 | `RECOVERY_CODE_BATCH_SIZE` | `10` | Cuántos códigos de recuperación se generan de golpe desde `/admin/recovery`. |
 | `RECOVERY_CODE_LOW_WARNING` | `3` | Avisar por push cuando queden este número de códigos o menos. |
 | `GEOIP_ACCOUNT_ID` / `GEOIP_LICENSE_KEY` | *(vacío)* | Cuenta gratuita opcional de [MaxMind](https://www.maxmind.com/), para añadir ciudad/país/operador tanto a la auditoría como a la propia notificación push. Vacío = esa parte queda en blanco, el login sigue funcionando igual. |
+| `NOTIFICATION_MAP` | `true` | Añade a la notificación un mapa de dónde viene el inicio de sesión (necesita GeoIP e `IDP_ISSUER_URL`, de donde lo descarga el móvil). Se dibuja en `MAP_BUDGET_SECONDS` (`4`) o la notificación sale sin él. La copia pública desaparece en cuanto la petición se aprueba, se rechaza o caduca; la auditoría guarda uno por inicio de sesión. |
+| `MAP_TILE_URL` / `MAP_TILE_ATTRIBUTION` | OpenStreetMap | Teselas del mapa, al estilo `{z}/{x}/{y}`, y el crédito que se imprime en él. Lo predeterminado cumple la [política de uso de teselas de OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/) para unos pocos inicios de sesión al día; para más, apúntalo a tu propio servidor de teselas. |
+| `OPERATOR_LOGOS` | `true` | Pone en el mapa el logo del operador de la red: la web del ASN se busca en [PeeringDB](https://www.peeringdb.com/) y se usa su icono más grande. Se guarda 30 días por operador (7 si no se encontró ninguno). Solo se descarga de direcciones HTTPS públicas. |
 | `ZITADEL_API_URL` / `ZITADEL_API_CLIENT_ID` / `ZITADEL_API_CLIENT_SECRET` | *(vacío)* | Opcional, solo ZITADEL: nombra en la notificación la app en la que se está iniciando sesión (p. ej. `App: Grafana (grafana.example.com)`). Una app que sirve a varias webs —un mismo proxy de inicio de sesión, como oauth2-proxy, delante de muchas, cada una con su URI de vuelta— se muestra solo por la web (`App: nas.example.com`), porque su nombre sería el mismo para todas. El login en sí nunca dice para qué app es, pero ZITADEL lo registra y este servicio puede preguntárselo. Crea un **usuario de servicio** con secreto de cliente y dale el rol de solo lectura **`IAM_OWNER_VIEWER`** (Default settings → Administrators); solo lee el registro de eventos de ZITADEL. Vacío, o si ZITADEL no responde en 3 s, la notificación sale sin la línea de la app. **Con Keycloak no hace falta configurar nada**: la dirección de la app (no su nombre) se lee de la propia petición que manda Keycloak. |
 
 Incluye una plantilla lista para Community Applications de Unraid:
@@ -461,7 +477,7 @@ Todo bajo `/admin`. Se entra con `ADMIN_USERNAME`/`ADMIN_PASSWORD` en una págin
 |---|---|
 | **Home** | De un vistazo: cuentas totales, cuántas tienen dispositivo asignado, códigos de recuperación bajos, IPs bloqueadas ahora mismo. |
 | **Accounts** | Añade un email, marca qué dispositivos se notifican. Es el único modelo de cuentas que usa el servicio; independiente de cualquier IDP. Un dispositivo asignado a una cuenta que ahora mismo no aparece en Home Assistant se sigue mostrando y se conserva, salvo que lo desmarques. |
-| **Audit** | Historial por cuenta: aprobado / rechazado / timeout / código de recuperación usado / envío fallido, con fecha, IP, navegador y (si GeoIP está configurado) ciudad/país/operador. |
+| **Audit** | Historial por cuenta: aprobado / rechazado / timeout / código de recuperación usado / envío fallido, con fecha, IP, navegador, (si GeoIP está configurado) ciudad/país/operador y el mapa que llevaba la notificación. |
 | **Recovery codes** | Generar o regenerar un lote por cuenta — se muestran una sola vez, luego nunca se pueden recuperar. Regenerar invalida al instante todos los códigos del lote anterior. |
 | **Blocked IPs** | Ver quién está bloqueado ahora mismo y desbloquear manualmente — importante si tres rechazos accidentales (o códigos mal tecleados) dejan fuera al dueño real de la cuenta. |
 | **Branding** | Sube un logo/fondo/favicon y pon un título para la página puente. Se acepta cualquier formato o tamaño de imagen — cada una se convierte y redimensiona automáticamente (logo/favicon a PNG, fondo a JPEG). |

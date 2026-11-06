@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from app import admin_sessions, db, geoip_updater, ha_client, idp_jwt
+from app import admin_sessions, db, geoip_updater, ha_client, idp_jwt, login_map
 from app.security_headers import SecurityHeadersMiddleware
 from app.routers import admin, idp
 from app.routers.admin._auth import AdminRefused
@@ -63,6 +63,7 @@ async def lifespan(app: FastAPI):
     connectivity_task.cancel()
     await ha_client.stop_ws_listener()
     await ha_client.close_client()
+    await login_map.close_client()
     await idp.stop_periodic_cleanup()
     await geoip_updater.stop_periodic_updater()
     await db.close_db()

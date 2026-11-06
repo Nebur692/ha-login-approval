@@ -37,6 +37,8 @@ class LoginContext:
     geo_asn_org: str | None = None
     app: str | None = None
     """Which app the login is for, when the broker could tell us (app/target_app.py)."""
+    image_url: str | None = None
+    """The map the phone shows inside the notification (app/login_map.py)."""
 
 
 async def run_approval(targets: list[str], request_id: str, context: LoginContext) -> ApprovalOutcome:
@@ -58,6 +60,7 @@ async def run_approval(targets: list[str], request_id: str, context: LoginContex
         try:
             await ha_client.send_approval_notification(
                 target, request_id, text["title"], text["body"], text["approve"], text["reject"],
+                image_url=context.image_url,
             )
         except Exception:
             logger.exception("Failed to send approval notification to %s", target)

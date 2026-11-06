@@ -27,6 +27,12 @@ class GeoInfo:
     city: str | None = None
     country: str | None = None
     asn_org: str | None = None
+    asn: int | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    accuracy_km: int | None = None
+    """How far from latitude/longitude the address may really be: MaxMind's
+    own estimate, from a few km for a city match to hundreds for a country."""
 
 
 _city_reader: geoip2.database.Reader | None = None
@@ -78,6 +84,9 @@ def lookup(ip: str) -> GeoInfo:
             city_resp = _city_reader.city(ip)
             info.city = city_resp.city.name
             info.country = city_resp.country.iso_code
+            info.latitude = city_resp.location.latitude
+            info.longitude = city_resp.location.longitude
+            info.accuracy_km = city_resp.location.accuracy_radius
         except (geoip2.errors.AddressNotFoundError, ValueError):
             pass
 
@@ -85,6 +94,7 @@ def lookup(ip: str) -> GeoInfo:
         try:
             asn_resp = _asn_reader.asn(ip)
             info.asn_org = asn_resp.autonomous_system_organization
+            info.asn = asn_resp.autonomous_system_number
         except (geoip2.errors.AddressNotFoundError, ValueError):
             pass
 

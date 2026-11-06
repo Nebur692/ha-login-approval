@@ -11,6 +11,8 @@ from tests.conftest import sign_in
 
 PAGES = ["/admin", "/admin/accounts", "/admin/audit", "/admin/recovery", "/admin/blocked-ips",
          "/admin/branding", "/admin/signing-key", "/admin/activity"]
+# Files behind the sign-in, checked in test_login_map (a stranger gets sent to sign in).
+FILES = ["/admin/audit/map/{request_id}.png"]
 ACTIONS = ["/admin/accounts/save", "/admin/recovery/generate", "/admin/blocked-ips/unblock",
            "/admin/branding/save", "/admin/signing-key/rotate", "/admin/activity/end-session", "/admin/logout"]
 
@@ -52,7 +54,7 @@ def _admin_routes() -> set[tuple[str, str]]:
 
 
 def test_the_lists_below_cover_every_admin_route():
-    listed = {("GET", p) for p in PAGES} | {("POST", p) for p in ACTIONS}
+    listed = {("GET", p) for p in PAGES + FILES} | {("POST", p) for p in ACTIONS}
     assert _admin_routes() == listed
 
 
